@@ -17,13 +17,16 @@ function EntriesView() {
     text: string;
     date: string;
     created_at: string;
+    love_count?: number;
+    hate_count?: number;
+    comments: Comment[];
   };
   
   const [entries, setEntries] = useState<Entry[]>([]);
 
   useEffect(() => {
     async function fetchEntries() {
-      const { data: entriesData, error: entriesError } = await supabaseClient
+      const { data: entriesData } = await supabaseClient
         .from("entries")
         .select("*")
         .order("created_at", { ascending: false });
@@ -36,20 +39,20 @@ function EntriesView() {
         .from("comments")
         .select("*");
 
-      const merged = entriesData.map((entry) => {
-        const action = actionsData?.find((a) => a.entry_id === entry.id);
+      const merged = (entriesData || []).map((note) => {
+        const action = actionsData?.find((a) => a.entry_id === note.id);
         const comments = commentsData
-          ?.filter((c) => c.entry_id === entry.id)
+          ?.filter((c) => c.entry_id === note.id)
             .map((c) => ({
               ...c,
-              reactions: commentsData?.find((r) => r.comment_id === c.id) || {
+              reactions: commentsData?.find((r) => r.id === c.id) || {
                 love_count: 0,
                 hate_count: 0,
               },
             })) || [];
   
           return {
-            ...entry,
+            ...note,
             love_count: action?.love_count || 0,
             hate_count: action?.hate_count || 0,
             comments: comments || [],            
@@ -89,15 +92,6 @@ function EntriesView() {
     }
   }
 
-  async function deleteNote(id: string) {
-    const confirmDelete = window.confirm(
-      "Are you sure you want to delete this entry? This action cannot be undone."
-    );
-    if (!confirmDelete) return;
-
-    await supabaseClient.from("entries").delete().eq("id", id);
-    setEntries((prev) => prev.filter((n) => n.id !== id));
-  }
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [replyingTo, setReplyingTo] = useState<{
     commentId: string;
@@ -160,8 +154,8 @@ function EntriesView() {
         e.id === id
           ? {
               ...e,
-              love_count: type === "love" ? e.love_count + 1 : e.love_count,
-              hate_count: type === "hate" ? e.hate_count + 1 : e.hate_count,
+              love_count: type === "love" ? (e.love_count || 0) + 1 : (e.love_count || 0),
+              hate_count: type === "hate" ? (e.hate_count || 0) + 1 : (e.hate_count || 0),
             }
           : e
       )
@@ -170,46 +164,45 @@ function EntriesView() {
   async function incrementCommentReaction(commentId: string, type: "love" | "hate" ) {
     // Check if reactions row exists
 
-    const { data: existing, error } = await supabaseClient
+    const { data: existing } = await supabaseClient
     .from("comments")
     .select("*")
-    .eq("entry_id", commentId)
+    .eq("id", commentId)
     .single();
     
     if (!existing) {
       // Create row if it doesn't exist
       await supabaseClient.from("comments").insert({
-        comment_id: commentId,
+        id: commentId,
         love_count: type === "love" ? 1 : 0,
         hate_count: type === "hate" ? 1 : 0,
       });
     } else {
       const newCount =
-        type === "love" ? comments.love_count + 1 : comments.hate_count + 1;
+        type === "love" ? existing.love_count + 1 : existing.hate_count + 1;
   
       await supabaseClient
         .from("comments")
         .update({ [type + "_count"]: newCount })
-        .eq("entry_id", commentId);
+        .eq("id", commentId);
     }
   
     // Update local state
     setEntries((prev) =>
-      prev.map((e) => ({
-        ...e,
-        comments: e.comments.map((c: any) =>
+      prev.map((entry) => ({
+        ...entry,
+        comments: entry.comments.map((c: any) =>
           c.id === commentId
             ? {
                 ...c,
-                comments: {
-                  ...c.reactions,
-                  [type + "_count"]: (c.comments?.[type + "_count"] || 0) + 1,
-                },
+                love_count: type === "love" ? (c.love_count || 0) + 1 : c.love_count,
+                hate_count: type === "hate" ? (c.hate_count || 0) + 1 : c.hate_count,
               }
             : c
         ),
       }))
     );
+    
   }
 
 
@@ -232,7 +225,6 @@ function EntriesView() {
                 <button className="collapse-btn" type="button" onClick={() => toggleExpanded(note.id)}>
                 {expandedIds.has(note.id) ? "Collapse" : "Expand"}
                 </button>
-              <button type="button" onClick={() => deleteNote(note.id)}>Delete</button>
               
               <button type="button" onClick={() => navigate(`/Entry/${note.id}`)}>
               Edit
@@ -263,10 +255,10 @@ function EntriesView() {
                         <p>{c.text}</p>
                         <div>
                           <button onClick={() => incrementCommentReaction(c.id, "love")}>
-                            🤍 {c.reactions?.love_count || 0}
+                            🤍 {c.love_count || 0}
                           </button>
                           <button onClick={() => incrementCommentReaction(c.id, "hate")}>
-                            👎 {c.reactions?.hate_count || 0}
+                            👎 {c.hate_count || 0}
                           </button>
                           <button
                             className="reply-btn"

@@ -86,7 +86,7 @@ function Entry(){
 
       <div>
         <button onClick={() => navigate(-1)}>Back</button>
-        <button type="button" onClick={() => deleteNote(note.id)}>Delete</button>
+        <button type="button" onClick={() => deleteNote(id!)}>Delete</button>
         <button onClick={saveEntry} disabled={saving}>
           {saving ? "Saving..." : "Save"}
         </button>
