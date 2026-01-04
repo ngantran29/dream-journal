@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import supabaseClient from "../supabase";
+import EmojiPicker from "emoji-picker-react";
+import type { EmojiClickData } from 'emoji-picker-react';
 
 function EntriesView() {
   const navigate = useNavigate();
@@ -9,8 +11,9 @@ function EntriesView() {
   const [commentText, setCommentText] = useState("");
   const [username, setUsername] = useState("");
   const [commentingEntryId, setCommentingEntryId] = useState<string | null>(null); // <-- track which entry user is commenting on
-
-
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  
   type Entry = {
     id: string;
     title: string;
@@ -20,6 +23,7 @@ function EntriesView() {
     love_count?: number;
     hate_count?: number;
     comments: Comment[];
+    image_url: string;
   };
   
   const [entries, setEntries] = useState<Entry[]>([]);
@@ -205,18 +209,57 @@ function EntriesView() {
     
   }
 
-
-
+  async function generateImage() {
+    if (!text) return;
+    const url = "https://jeggqdlnxakucuwlbchz.supabase.co/storage/v1/object/sign/entry_images/placeholder-1-e1533569576673-960x960.png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV85MDk5MjQzMi0wMWU3LTRmYTQtODBlMi04ODAzN2MwOWJiN2QiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJlbnRyeV9pbWFnZXMvcGxhY2Vob2xkZXItMS1lMTUzMzU2OTU3NjY3My05NjB4OTYwLnBuZyIsImlhdCI6MTc2NzU2NjM4NywiZXhwIjoxNzk5MTAyMzg3fQ.aVNV2lkb8FLnZlCoHnSC2I35dpMVUqd4VGTmI8UwPt4";
+  
+    try {
+      setImageUrl(url);
+    } catch (err) {
+      console.error("Failed to generate image", err);
+    }
+  }
+  function onEmojiClick(emojiData: EmojiClickData) {
+    setCommentText((prev) => prev + emojiData.emoji);
+    setShowEmojiPicker(false);
+  }
 
   return (
     <div>
       <div className="page-header">
         <h1>DreamThreads</h1>
         <p className="catchphrase">Where my nightly adventures regenerate</p>
+        <br></br>
       </div>
 
       {entries.length === 0 && <p>No Entries..</p>}
+
       <ul>
+        <div className="entry-creation">
+            <form onSubmit={createNote}>
+            <p><strong>Create New Entry</strong></p>
+            {imageUrl && (
+              <div style={{ marginTop: "10px" }}>
+                <img src={imageUrl} alt="Generated" style={{ maxWidth: "300px", borderRadius: "8px" }} />
+              </div>
+            )}
+            <input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Title..."
+            />
+            <textarea
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              placeholder="Content"
+            />
+            <button type="button" onClick={generateImage} disabled={!text}> Generate Image </button>
+            <button type="button" disabled={!text}> Generate Text </button>
+            <button type="button" disabled={!text}> Generate Title </button>
+
+            <button type="submit">Post</button>
+            </form>
+          </div>
         {entries.map((note) => (
           <li key={note.id}>
             <span>
@@ -229,6 +272,13 @@ function EntriesView() {
               <button type="button" onClick={() => navigate(`/Entry/${note.id}`)}>
               Edit
               </button>
+              <div className="entry-image" style={{ marginBottom: "10px" }}>
+                <img 
+                  src={note.image_url} 
+                  alt={""} 
+                  style={{ maxWidth: "100%", borderRadius: "8px", display: "block" }} 
+                />
+              </div>
                 <p>{expandedIds.has(note.id)
                 ? note.text
                 : getPreview(note.text)}</p>
@@ -289,6 +339,21 @@ function EntriesView() {
                     onChange={(e) => setCommentText(e.target.value)}
                     style={{ display: "block", marginBottom: "5px" }}
                   />
+                  <button
+                    type="button"
+                    className="emoji-insert-btn"
+                    onClick={() => setShowEmojiPicker((v) => !v)}
+                    disabled={showEmojiPicker}
+                  >
+                    😊
+                  </button>
+
+                  {showEmojiPicker && (
+                    <div className="emoji-picker">
+                      <EmojiPicker onEmojiClick={onEmojiClick} />
+                    </div>
+                  )}
+                  
                   <button onClick={() => addComment(note.id)}>Post</button>
                   <button onClick={() => setCommentingEntryId(null)}>Cancel</button>
                   
@@ -299,25 +364,7 @@ function EntriesView() {
             </div>
             </span>
           </li>
-        ))}
-        <div className="entry-creation">
-          <form onSubmit={createNote}>
-          <p><strong>Create New Entry</strong></p>
-          <input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Title..."
-          />
-          <textarea
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            placeholder="Content"
-          />
-          <button type="submit">Post</button>
-          </form>
-        </div>
-
-      
+        ))}      
       </ul>
 
       

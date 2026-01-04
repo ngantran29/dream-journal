@@ -88,17 +88,6 @@ button:focus-visible {
   font-style: italic;
 }
 
-/* ---------- Thread List ---------- */
-ul {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(max(64px, 100%/4), 1fr) );
-  gap: 1rem;
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  position: relative;
-}
-
 /* Thread item */
 li {
   position: relative;
@@ -119,6 +108,8 @@ li {
     0 10px 25px rgba(0, 0, 0, 0.35),
     inset 0 1px 0 rgba(255, 255, 255, 0.03);
   transition: transform 0.15s ease, box-shadow 0.15s ease;
+  min-width: 300px;
+  max-width: 500px;
 }
 
 /* Hover lift */
@@ -217,12 +208,16 @@ li button {
     0 10px 25px rgba(0, 0, 0, 0.35),
     inset 0 1px 0 rgba(255, 255, 255, 0.03);
   transition: transform 0.15s ease, box-shadow 0.15s ease;
+  min-width: 300px;
+  max-width: 500px;
 }
 
 .entry-creation input,
 .entry-creation textarea {
   width: 100%;
   box-sizing: border-box;
+  background-color: #414141;
+  color: #e7e7e7;
 }
 
 .entry-creation textarea {
@@ -241,4 +236,19 @@ li button {
 .entry-creation button {
   background-color: #373737;
   text-align: right;
+}
+
+.entry-edit textarea {
+  width: 500px;
+  background-color: #373737;
+  color: #e7e7e7;
+}
+
+.emoji-picker {
+  position: absolute;
+  z-index: 10;
+  bottom: 50px; /* Position it above the input */
+  left: 0;
+  max-width: 1000px; 
+  max-height: 800px; 
 }

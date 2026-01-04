@@ -19,6 +19,7 @@ function Entry(){
   const [text, setText] = useState("");
   const [title, setTitle] = useState("");
   const [saving, setSaving] = useState(false);
+  const [imageUrl, setImageUrl] = useState<string | null>(null); // store generated image
 
   useEffect(() => {
     if (!id) return;
@@ -75,8 +76,12 @@ function Entry(){
   if (!entry) return <p>Loading...</p>;
 
   return (
-    <div>
-      <h2>{title}</h2>
+    <div className="entry-edit">
+      <h1><textarea
+        value={title}
+        onChange={(e) => setText(e.target.value)}
+        rows={1}
+      /></h1>
 
       <textarea
         value={text}
