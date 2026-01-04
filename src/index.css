@@ -5,7 +5,7 @@
 
   color-scheme: light dark;
   color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
+  background-color: #151515;
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -15,11 +15,11 @@
 
 a {
   font-weight: 500;
-  color: #646cff;
+  color: #f0f0f0;
   text-decoration: inherit;
 }
 a:hover {
-  color: #535bf2;
+  color: #acb2fc;
 }
 
 body {
@@ -36,33 +36,209 @@ h1 {
 }
 
 button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  background-color: #1a1a1a;
+  align-self: flex-start;
+  padding: 3px 3px;
+  font-size: 0.95em;
+  border: none;
+  border-radius: 5px;
+  background-color: #373737;
+  color: white;
   cursor: pointer;
-  transition: border-color 0.25s;
+  margin-right: 2px;
 }
 button:hover {
-  border-color: #646cff;
+  background-color: #636363;
 }
 button:focus,
 button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
+  background-color: #8c8c8c;
 }
 
 @media (prefers-color-scheme: light) {
   :root {
     color: #213547;
-    background-color: #ffffff;
+    background-color: #191919;
   }
   a:hover {
     color: #747bff;
   }
   button {
-    background-color: #f9f9f9;
+    background-color: transparent;
   }
+}
+
+/* ---------- Page Header ---------- */
+.page-header {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.page-header h1 {
+  font-size: 3rem;           /* big title */
+  font-weight: 700;
+  color: #f8fafc;            /* white for dark mode */
+  margin: 0;
+}
+
+.page-header .catchphrase {
+  font-size: 1.2rem;
+  font-weight: 400;
+  color: #94a3b8;            /* soft gray for tagline */
+  margin-top: 0.5rem;
+  font-style: italic;
+}
+
+/* ---------- Thread List ---------- */
+ul {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(max(64px, 100%/4), 1fr) );
+  gap: 1rem;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  position: relative;
+}
+
+/* Thread item */
+li {
+  position: relative;
+  margin-left: 40px;
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    #1e1e1e,
+    transparent
+  );
+  border-radius: 8cappx;
+  padding: 1rem 1.2rem;
+  margin-bottom: 1.25rem;
+  display: flex;
+  gap: 0.2rem;
+  align-items: flex-start;
+  box-shadow:
+    0 10px 25px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+/* Hover lift */
+li:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 15px 35px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+/* Content block */
+li span {
+  flex: 1;
+  cursor: pointer;
+}
+
+/* Title */
+li strong {
+  display: block;
+  font-size: 1.1rem;
+  color: #ffffff;
+  margin-bottom: 0.25rem;
+  text-align: left;
+}
+
+/* Preview text */
+li p {
+  margin: 0.25rem 0 0.5rem;
+  color: #dcdcdc;
+  line-height: 1.4;
+  text-align: left;
+}
+
+/* Date */
+li small {
+  font-size: 0.45rem;
+  color: #4b4b4b;
+}
+
+/* Buttons column */
+li button {
+  align-self: flex-start;
+  margin-left: 0.25rem;
+}
+
+/* Container for all comments */
+/* Input form for adding comment */
+.comment-container {
+  display: flex;
+  flex-direction: column;
+  margin-top: 5px;
+  max-width: 600px;
+  text-align: left;
+  display: inline;
+}
+
+.comment-container div{
+  border-bottom: 0.01px solid rgb(22, 22, 22);
+}
+
+.comment-container strong {
+  display: block;
+  margin-bottom: 0px;
+  color: #e7e7e7;
+  text-align: left;
+  display: inline;
+}
+.comment-container input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.comment-container textarea {
+  min-height: 100px;      /* BIGGER text area */
+  resize: vertical;       /* allow vertical resize */
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.entry-creation  {
+  position: relative;
+  margin-left: 40px;
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    #1e1e1e,
+    transparent
+  );
+  border-radius: 8cappx;
+  padding: 1rem 1.2rem;
+  margin-bottom: 1.25rem;
+  display: flex;
+  gap: 0.2rem;
+  align-items: flex-start;
+  box-shadow:
+    0 10px 25px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.entry-creation input,
+.entry-creation textarea {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.entry-creation textarea {
+  min-height: 120px;
+  resize: vertical;
+}
+
+.entry-creation strong {
+  display: block;
+  margin-bottom: 0px;
+  color: #e7e7e7;
+  text-align: left;
+  display: inline;
+}
+
+.entry-creation button {
+  background-color: #373737;
+  text-align: right;
 }

@@ -64,7 +64,14 @@ function Entry(){
     if (error) console.error(error);
     setSaving(false);
   }
+  async function deleteNote(id: string) {
+    const confirmDelete = window.confirm(
+      "Are you sure you want to delete this entry? This action cannot be undone."
+    );
+    if (!confirmDelete) return;
 
+    await supabaseClient.from("entries").delete().eq("id", id);
+  }
   if (!entry) return <p>Loading...</p>;
 
   return (
@@ -79,6 +86,7 @@ function Entry(){
 
       <div>
         <button onClick={() => navigate(-1)}>Back</button>
+        <button type="button" onClick={() => deleteNote(note.id)}>Delete</button>
         <button onClick={saveEntry} disabled={saving}>
           {saving ? "Saving..." : "Save"}
         </button>
