@@ -212,18 +212,14 @@ function EntriesView() {
   async function generateImage() {
     if (!text) return;
     const url = "https://jeggqdlnxakucuwlbchz.supabase.co/storage/v1/object/sign/entry_images/placeholder-1-e1533569576673-960x960.png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV85MDk5MjQzMi0wMWU3LTRmYTQtODBlMi04ODAzN2MwOWJiN2QiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJlbnRyeV9pbWFnZXMvcGxhY2Vob2xkZXItMS1lMTUzMzU2OTU3NjY3My05NjB4OTYwLnBuZyIsImlhdCI6MTc2NzU2NjM4NywiZXhwIjoxNzk5MTAyMzg3fQ.aVNV2lkb8FLnZlCoHnSC2I35dpMVUqd4VGTmI8UwPt4";
-  
-    try {
-      setImageUrl(url);
-    } catch (err) {
-      console.error("Failed to generate image", err);
-    }
+    setImageUrl(url);
   }
+
   function onEmojiClick(emojiData: EmojiClickData) {
     setCommentText((prev) => prev + emojiData.emoji);
     setShowEmojiPicker(false);
   }
-
+  
   return (
     <div>
       <div className="page-header">
@@ -240,7 +236,7 @@ function EntriesView() {
             <p><strong>Create New Entry</strong></p>
             {imageUrl && (
               <div style={{ marginTop: "10px" }}>
-                <img src={imageUrl} alt="Generated" style={{ maxWidth: "300px", borderRadius: "8px" }} />
+                <img src={imageUrl} alt=" " style={{ maxWidth: "300px", borderRadius: "8px" }} />
               </div>
             )}
             <input

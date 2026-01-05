@@ -18,8 +18,8 @@ function Entry(){
   const [entry, setEntry] = useState<EntryType | null>(null);
   const [text, setText] = useState("");
   const [title, setTitle] = useState("");
+  const [image_url, setUrl] = useState("");
   const [saving, setSaving] = useState(false);
-  const [imageUrl, setImageUrl] = useState<string | null>(null); // store generated image
 
   useEffect(() => {
     if (!id) return;
@@ -46,6 +46,7 @@ function Entry(){
       setEntry(data);
       setTitle(data.title);
       setText(data.text);
+      setUrl(data.image_url);
     }
     
 
@@ -82,6 +83,14 @@ function Entry(){
         onChange={(e) => setText(e.target.value)}
         rows={1}
       /></h1>
+
+      <div className="entry-image" style={{ marginBottom: "10px" }}>
+                <img 
+                  src={image_url} 
+                  alt={""} 
+                  style={{ maxWidth: "100%", borderRadius: "8px", display: "block" }} 
+                />
+      </div>
 
       <textarea
         value={text}
