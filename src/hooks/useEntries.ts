@@ -319,39 +319,56 @@ export function useEntries() {
   // ==========================================================================
   
   const toggleReaction = useCallback(async (
-    entryId: string, 
+    entryId: string,
     reactionType: "love" | "hate",
     userId: string
   ) => {
+    // Snapshot for rollback
+    const previousEntries = entries;
+  
+    // 🔥 OPTIMISTIC UI UPDATE
+    setEntries(prev =>
+      prev.map(entry => {
+        if (entry.id !== entryId) return entry;
+  
+        const otherType = reactionType === "love" ? "hate" : "love";
+        const hasReacted = entry[`${reactionType}_count`] > 0;
+  
+        return {
+          ...entry,
+          [`${reactionType}_count`]: hasReacted ? 0 : 1,
+          [`${otherType}_count`]: 0,
+        };
+      })
+    );
+  
     try {
-      // Check if user already reacted
+      // Check existing action
       const { data: existingAction, error: fetchError } = await supabase
         .from("entry_actions")
         .select("*")
         .eq("entry_id", entryId)
         .eq("user_id", userId)
-        .maybeSingle(); // Use maybeSingle instead of single to avoid error when no rows
-
+        .maybeSingle();
+  
       if (fetchError) throw fetchError;
-
+  
       if (existingAction) {
-        // Toggle off if same reaction, switch if different
-        const currentCount = existingAction[`${reactionType}_count`] || 0;
         const otherType = reactionType === "love" ? "hate" : "love";
-        
+        const currentCount = existingAction[`${reactionType}_count`] || 0;
+  
         const updates = {
           [`${reactionType}_count`]: currentCount > 0 ? 0 : 1,
-          [`${otherType}_count`]: 0, // Reset opposite reaction
+          [`${otherType}_count`]: 0,
         };
-
+  
         const { error } = await supabase
           .from("entry_actions")
           .update(updates)
           .eq("id", existingAction.id);
-
+  
         if (error) throw error;
       } else {
-        // Create new reaction
         const { error } = await supabase
           .from("entry_actions")
           .insert({
@@ -359,20 +376,23 @@ export function useEntries() {
             user_id: userId,
             [`${reactionType}_count`]: 1,
           });
-
+  
         if (error) throw error;
       }
-
-      // Refresh to get updated counts
-      await fetchEntries();
-      
+  
       return { success: true, error: null };
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "Failed to toggle reaction";
+      // ❌ ROLLBACK ON FAILURE
+      setEntries(previousEntries);
+  
+      const errorMessage =
+        err instanceof Error ? err.message : "Failed to toggle reaction";
+  
       console.error("Toggle reaction error:", err);
+  
       return { success: false, error: { message: errorMessage } };
     }
-  }, [fetchEntries]);
+  }, [entries]);
 
   // ==========================================================================
   // COMMENT HANDLERS
