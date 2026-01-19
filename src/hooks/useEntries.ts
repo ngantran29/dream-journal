@@ -27,6 +27,7 @@ export type Entry = {
   hate_count: number;
   comments: Comment[];
   user_id: string;
+  userReaction?: "love" | "hate" | null;
 };
 
 type FetchError = {
@@ -49,6 +50,7 @@ type SupabaseEntryResponse = {
   entry_actions: Array<{
     love_count: number | null;
     hate_count: number | null;
+    user_id: string;
   }> | null;
   comments: Array<{
     id: string;
@@ -107,6 +109,18 @@ export function useEntries() {
       // Transform the data with proper typing
       const transformed: Entry[] = (entriesData || []).map((entry: any) => {
         const typedEntry = entry as SupabaseEntryResponse;
+        const currentUserId = supabase.auth.getUser()?.data?.user?.id;
+
+        const userAction = typedEntry.entry_actions?.find(
+          a => a.user_id === currentUserId
+        );
+
+        const userReaction =
+          userAction?.love_count === 1
+            ? "love"
+            : userAction?.hate_count === 1
+            ? "hate"
+            : null;
 
         // Aggregate love/hate counts
         const love_count = typedEntry.entry_actions?.reduce(
@@ -145,6 +159,7 @@ export function useEntries() {
           hate_count,
           comments,
           user_id: typedEntry.user_id,
+          userReaction,
         };
       });
 
@@ -330,14 +345,41 @@ export function useEntries() {
     setEntries(prev =>
       prev.map(entry => {
         if (entry.id !== entryId) return entry;
-  
+    
         const otherType = reactionType === "love" ? "hate" : "love";
-        const hasReacted = entry[`${reactionType}_count`] > 0;
-  
+    
+        // Remove same reaction
+        if (entry.userReaction === reactionType) {
+          return {
+            ...entry,
+            [`${reactionType}_count`]: Math.max(
+              0,
+              entry[`${reactionType}_count`] - 1
+            ),
+            userReaction: null,
+          };
+        }
+    
+        // Switch reaction
+        if (entry.userReaction === otherType) {
+          return {
+            ...entry,
+            [`${otherType}_count`]: Math.max(
+              0,
+              entry[`${otherType}_count`] - 1
+            ),
+            [`${reactionType}_count`]:
+              entry[`${reactionType}_count`] + 1,
+            userReaction: reactionType,
+          };
+        }
+    
+        // New reaction
         return {
           ...entry,
-          [`${reactionType}_count`]: hasReacted ? 0 : 1,
-          [`${otherType}_count`]: 0,
+          [`${reactionType}_count`]:
+            entry[`${reactionType}_count`] + 1,
+          userReaction: reactionType,
         };
       })
     );
