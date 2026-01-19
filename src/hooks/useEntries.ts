@@ -109,7 +109,7 @@ export function useEntries() {
       // Transform the data with proper typing
       const transformed: Entry[] = (entriesData || []).map((entry: any) => {
         const typedEntry = entry as SupabaseEntryResponse;
-        const currentUserId = supabase.auth.getUser()?.data?.user?.id;
+        const currentUserId = entry.userId;
 
         const userAction = typedEntry.entry_actions?.find(
           a => a.user_id === currentUserId
