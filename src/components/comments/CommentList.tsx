@@ -95,9 +95,9 @@ export default function CommentList({ entry, userId, onAddComment, onDeleteComme
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Sort comments by date (newest first)
+  // Sort comments by date (oldest first)
   const sortedComments = [...entry.comments].sort(
-    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
   );
 
   return (

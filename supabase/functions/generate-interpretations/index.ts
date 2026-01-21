@@ -42,7 +42,7 @@ Deno.serve(async (req) => {
         tags: {
           type: SchemaType.ARRAY,
           items: { type: SchemaType.STRING },
-          description: "A list of 3-5 relevant tags.",
+          description: "A list of 3-5 relevant tags with at least 1 tag from the categories Love, Life, Relationship, Job, Career, Health.",
         },
       },
       required: ["interpretation", "tags"],

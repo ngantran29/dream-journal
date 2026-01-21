@@ -304,7 +304,8 @@ export default function EntryCard({
             <button 
               onClick={(e) => {
                 e.stopPropagation(); // Don't toggle when clicking generate
-                handleGenerateAI();
+                handleGenerateAI(); 
+                setIsAiVisible(!isAiVisible);
               }}
               className="text-[10px] bg-blue-600 hover:bg-blue-500 text-white px-2 py-1 rounded shadow-lg transition-all"
             >
