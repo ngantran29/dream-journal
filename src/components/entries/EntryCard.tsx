@@ -2,10 +2,12 @@ import { useState } from "react";
 import type { Entry, Comment } from "../../hooks/useEntries";
 import EntryActions from "./EntryActions";
 import CommentList from "../comments/CommentList";
+import { supabase } from "../../integrations/supabase/client";
 
 type Props = {
   entry: Entry;
   userId: string | null;
+  onUpdateEntry?: (id: string, updates: any) => Promise<{success: boolean | null; error: { message: string } | null }>;
   onDelete?: (id: string) => Promise<{ success: boolean; error: { message: string } | null }>;
   onToggleReaction?: (
     entryId: string, 
@@ -27,6 +29,7 @@ export default function EntryCard({
   entry, 
   userId, 
   onDelete,
+  onUpdateEntry,
   onToggleReaction,
   onAddComment,
   onDeleteComment
@@ -35,6 +38,81 @@ export default function EntryCard({
   const [showComments, setShowComments] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const [isEditing, setIsEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState(entry.title);
+  const [editText, setEditText] = useState(entry.text);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+
+  // AI State
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [aiData, setAiData] = useState<{ interpretation: string; tags: string[] } | null>(
+    entry.interpretation ? { interpretation: entry.interpretation, tags: entry.tags || [] } : null
+  );
+  const [isAiVisible, setIsAiVisible] = useState(false);
+
+  const handleUpdate = async () => {
+    if (!onUpdateEntry) {
+      console.error("onUpdateEntry is not defined");
+      return;
+    }
+    
+    setIsSavingEdit(true);
+    
+    try {
+      const result = await onUpdateEntry(entry.id, {
+        title: editTitle,
+        text: editText,
+      });
+      
+      // Check if there's an error OR if data is null
+      if (result.error) {
+        console.error(result.error.message);
+        alert(`Failed to update: ${result.error.message}`);
+      } else if (result.success) {
+        setIsEditing(false);
+      }
+    } catch (err) {
+      console.error("Update error:", err);
+      alert("Failed to update entry");
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
+
+  const handleGenerateAI = async () => {
+    setIsAnalyzing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("generate-interpretations", {
+        body: { entryText: entry.text },
+        headers: {
+          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+        },
+      });
+
+      if (error) throw error;
+      setAiData(data.data);
+    } catch (err) {
+      console.error("AI Generation failed:", err);
+      alert("Failed to generate AI interpretation.");
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  const handleSaveAI = async () => {
+    if (!aiData || !onUpdateEntry) return;
+    setIsSaving(true);
+    
+    await onUpdateEntry(entry.id, {
+      interpretation: aiData.interpretation,
+      tags: aiData.tags
+    });
+    
+    setIsSaving(false);
+    alert("Saved!");
+  };
 
   const handleDelete = async () => {
     if (!onDelete) return;
@@ -64,8 +142,8 @@ export default function EntryCard({
     year: "numeric",
   });
 
-  const textPreview = entry.text.length > 150 && !expandedText
-    ? entry.text.slice(0, 150) + "…"
+  const textPreview = entry.text.length > 100 && !expandedText
+    ? entry.text.slice(0, 100) + "…"
     : entry.text;
 
   const commentCount = entry.comments?.length ?? 0;
@@ -93,20 +171,40 @@ export default function EntryCard({
             className="font-bold text-lg cursor-pointer hover:text-blue-100 transition-colors"
             onClick={() => setExpandedText((v) => !v)}
           > 
-            {entry.title}
+            {/* Title Section (Edit vs View) */}
+          {isEditing ? (
+            <div className="font-bold text-lg text-white">{entry.title}
+            <input 
+              className="w-full bg-neutral-800 border border-blue-500 rounded p-2 text-white font-bold mb-2 outline-none"
+              value={editTitle}
+              onChange={(e) => setEditTitle(e.target.value)}
+            /> </div>
+          ) : (
+            <div className="font-bold text-lg text-white">{entry.title}</div>
+          )}
           </div>
         </div>
 
-        {/* Delete Button */}
-        {onDelete && userId === entry.user_id && (
-          <button
-            className="danger ml-4"
-            type="button"
-            onClick={handleDelete}
-            disabled={isDeleting}
-          >
-            {isDeleting ? "Deleting..." : "Delete"}
-          </button>
+        {/* Action Buttons (Edit/Delete) */}
+
+        
+      {userId === entry.user_id && (
+          <div className="flex gap-2">
+            <button 
+              onClick={() => setIsEditing(!isEditing)}
+              className="text-xs text-gray-400 hover:text-blue-400 transition-colors"
+            >
+              {isEditing ? "Close Edit View" : "Edit"}
+            </button>
+            {!isEditing && onDelete && (
+              <button 
+              onClick={handleDelete}
+              disabled={isDeleting}
+              className="text-xs text-gray-400 hover:text-red-400">
+                Delete
+              </button>
+            )}
+          </div>
         )}
       </div>
 
@@ -128,13 +226,34 @@ export default function EntryCard({
 
       {/* Entry Text */}
       <p className="mb-2 whitespace-pre-wrap">{textPreview}</p>
-      {entry.text.length > 150 && (
+      {/* Read more / show less */}
+      {entry.text.length > 100 && !isEditing && (
         <button
+          type="button"
           onClick={() => setExpandedText((v) => !v)}
           className="text-blue-500 text-sm mb-3 hover:text-blue-400 transition-colors"
         >
           {expandedText ? "Show Less" : "Read More"}
         </button>
+      )}
+
+      {/* Edit mode */}
+      {isEditing && (
+        <div className="space-y-3 mt-3">
+          <textarea
+            className="w-full bg-neutral-800 border border-neutral-700 rounded p-2 text-sm text-gray-200 min-h-[150px] outline-none focus:border-blue-500"
+            value={editText}
+            onChange={(e) => setEditText(e.target.value)}
+          />
+          <button
+            type="button"
+            onClick={handleUpdate}
+            disabled={isSavingEdit}
+            className="bg-blue-600 hover:bg-blue-500 text-white text-xs px-4 py-2 rounded font-bold transition-all disabled:opacity-50"
+          >
+            {isSavingEdit ? "Saving..." : "Save Changes"}
+          </button>
+        </div>
       )}
 
       {/* Reactions */}
@@ -164,6 +283,81 @@ export default function EntryCard({
           onDeleteComment={onDeleteComment}
         />
       )}
+
+{/* AI INSIGHTS SECTION */}
+<div className="mt-4 overflow-hidden rounded-lg border border-neutral-800 bg-neutral-800/30">
+      
+      {/* HEADER / TOGGLE BAR */}
+      <div 
+        className="flex justify-between items-center p-3 cursor-pointer hover:bg-neutral-800/50 transition-colors"
+        onClick={() => setIsAiVisible(!isAiVisible)}
+      >
+        <div className="flex items-center gap-2">
+          <span className="text-lg">✨</span>
+          <h4 className="text-xs font-bold text-blue-400 tracking-widest">
+            Dream Interpretation
+          </h4>
+        </div>
+        
+        <div className="flex items-center gap-3">
+          {!aiData && !isAnalyzing && (
+            <button 
+              onClick={(e) => {
+                e.stopPropagation(); // Don't toggle when clicking generate
+                handleGenerateAI();
+              }}
+              className="text-[10px] bg-blue-600 hover:bg-blue-500 text-white px-2 py-1 rounded shadow-lg transition-all"
+            >
+              Generate
+            </button>
+          )}
+          {isAnalyzing && <span className="text-[10px] text-blue-400 animate-pulse">Analyzing...</span>}
+          <span className={`text-gray-500 transition-transform duration-200 ${isAiVisible ? 'rotate-180' : ''}`}>
+            ▼
+          </span>
+        </div>
+      </div>
+
+      {/* COLLAPSIBLE CONTENT */}
+      {isAiVisible && (
+        <div className="p-3 pt-0 border-t border-neutral-800/50 animate-in slide-in-from-top-2 duration-200">
+          {!aiData && !isAnalyzing ? (
+            <p className="text-xs text-gray-500 italic py-2">
+              No analysis generated yet. Click generate to analyze this entry.
+            </p>
+          ) : aiData ? (
+            <div className="space-y-3 mt-3">
+              <textarea
+                className="w-full bg-neutral-900/50 border border-neutral-700 rounded-md p-2 text-sm text-gray-300 focus:border-blue-500 outline-none"
+                value={aiData.interpretation}
+                onChange={(e) => setAiData({ ...aiData, interpretation: e.target.value })}
+                rows={3}
+              />
+              
+              <div className="flex flex-wrap gap-2">
+                {aiData.tags.map((tag, i) => (
+                  <span key={i} className="text-[10px] bg-blue-900/20 text-blue-300 px-2 py-0.5 rounded border border-blue-800/50">
+                    #{tag}
+                  </span>
+                ))}
+              </div>
+
+              {userId === entry.user_id && (
+                <div className="flex justify-end">
+                  <button 
+                    onClick={handleSaveAI}
+                    disabled={isSaving}
+                    className="text-[11px] text-green-400 hover:text-green-300 font-medium flex items-center gap-1"
+                  >
+                    {isSaving ? "Saving..." : "✓ Save to Database"}
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : null}
+        </div>
+      )}
+    </div>
     </li>
   );
 }

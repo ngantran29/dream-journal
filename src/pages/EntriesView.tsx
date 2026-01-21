@@ -4,7 +4,6 @@ import { useEntries } from "../hooks/useEntries";
 import EntryList from "../components/entries/EntryList";
 import ImageUploadArea from "../components/ImageUploadArea";
 import PromptInput from "../components/PromptInput";
-// import { ErrorBoundary } from "../components/ErrorBoundary";
 import { signInWithGoogle, signOut } from "../integrations/supabase/auth";
 import { supabase } from "../integrations/supabase/client";
 import { toast } from "sonner";
@@ -16,6 +15,7 @@ export default function EntriesView() {
     loading,
     error,
     createEntry,
+    updateEntry,
     deleteEntry,
     toggleReaction,
     addComment,
@@ -77,6 +77,8 @@ export default function EntriesView() {
       text: text.trim(),
       date: new Date().toISOString().split("T")[0],
       image_url: previewImage,
+      interpretation: "",
+      tags: []
     });
 
     setIsCreating(false);
@@ -221,7 +223,7 @@ export default function EntriesView() {
             className="w-40 h-40 rounded-full object-cover" 
           /> 
         </div>
-        <h1 className="font-bold text-lg">Let your dreams inspire the world</h1>
+        <h1 className="font-bold text-lg">Dream. Visualize. Interpret. Connect.</h1>
 
         {!user && (
           <button
@@ -247,7 +249,7 @@ export default function EntriesView() {
       {/* AI Generator Panel */}
       <div className="mb-6 p-6 border-b border-neutral-700 shadow-sm w-full flex flex-col gap-4">
         <p className="text-small text-lg">
-          Transform fragments of your dreams into vivid images and stories. Create, Share, Inspire!
+        AI-visualize your stories, reveal deep insights, and share the inspiration.
         </p>
 
         {/* Image Upload */}
@@ -390,6 +392,7 @@ export default function EntriesView() {
           onToggleReaction={toggleReaction}
           onAddComment={addComment}
           onDeleteComment={deleteComment}
+          onUpdateEntry={updateEntry}
         />
     </div>
   );

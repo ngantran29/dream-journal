@@ -6,6 +6,7 @@ type EntryListProps = {
   userId: string | null;
   loading?: boolean;
   error?: { message: string } | null;
+  onUpdateEntry?: (id: string, updates: any) => Promise<{success: boolean | null; error: { message: string } | null }>;
   onDelete?: (id: string) => Promise<{ success: boolean; error: { message: string } | null }>;
   onToggleReaction?: (
     entryId: string, 
@@ -28,6 +29,7 @@ export default function EntryList({
   userId, 
   loading,
   error,
+  onUpdateEntry,
   onDelete,
   onToggleReaction,
   onAddComment,
@@ -83,6 +85,7 @@ export default function EntryList({
           onToggleReaction={onToggleReaction}
           onAddComment={onAddComment}
           onDeleteComment={onDeleteComment}
+          onUpdateEntry={onUpdateEntry}
         />
       ))}
     </ul>

@@ -28,6 +28,8 @@ export type Entry = {
   comments: Comment[];
   user_id: string;
   userReaction?: "love" | "hate" | null;
+  interpretation: string;
+  tags: string[];
 };
 
 type FetchError = {
@@ -61,6 +63,8 @@ type SupabaseEntryResponse = {
       username: string;
     } | null;
   }> | null;
+  interpretation?: string;
+  tags?: string[];
 };
 
 // ============================================================================
@@ -94,6 +98,8 @@ export function useEntries() {
           user_id,
           users_public!inner(username),
           entry_actions(love_count, hate_count),
+          interpretation,
+          tags,
           comments(
             id,
             text,
@@ -160,6 +166,8 @@ export function useEntries() {
           comments,
           user_id: typedEntry.user_id,
           userReaction,
+          interpretation: typedEntry.interpretation ?? "",
+          tags: Array.isArray(typedEntry.tags) ? typedEntry.tags : [],
         };
       });
 
@@ -220,6 +228,8 @@ export function useEntries() {
         image_url?: string;
         user_id: string;
         users_public: { username: string } | null;
+        interpretation: string;
+        tags: string[];
       };
 
       const newEntry: Entry = {
@@ -234,6 +244,8 @@ export function useEntries() {
         hate_count: 0,
         comments: [],
         user_id: typedData.user_id,
+        interpretation: typedData.interpretation || "",
+        tags: typedData.tags || [],
       };
 
       // Optimistic update
@@ -247,57 +259,53 @@ export function useEntries() {
     }
   }, []);
 
-  // ==========================================================================
+// ==========================================================================
   // UPDATE ENTRY
   // ==========================================================================
-  
+
   const updateEntry = useCallback(async (
-    id: string, 
-    updates: Partial<Pick<Entry, "title" | "text" | "date" | "image_url">>
+    id: string,
+    updates: Partial<Pick<Entry,
+      "title" | "text" | "date" | "image_url" | "interpretation" | "tags"
+    >>
   ) => {
     try {
+      console.log("Updating entry:", id, updates);
+      
       const { data, error } = await supabase
         .from("entries")
         .update(updates)
         .eq("id", id)
-        .select(`
-          id,
-          date,
-          title,
-          text,
-          image_url,
-          created_at,
-          user_id,
-          users_public!inner(username)
-        `)
-        .single();
-
-      if (error) throw error;
-      if (!data) throw new Error("No data returned from update");
-
-      const typedData = data as unknown as {
-        users_public: { username: string } | null;
-      };
-
-      // Update local state
-      setEntries(prev => prev.map(entry => {
-        if (entry.id === id) {
-          return {
-            ...entry,
-            ...updates,
-            username: typedData.users_public?.username || entry.username,
-          };
-        }
-        return entry;
-      }));
-
-      return { data, error: null };
+        .select();
+  
+      if (error) {
+        console.error("Supabase update error:", error);
+        throw error;
+      }
+  
+      console.log("Update successful:", data);
+  
+      // Update local state with the returned data
+      setEntries(prev =>
+        prev.map(entry =>
+          entry.id === id
+            ? {
+                ...entry,
+                ...updates,
+              }
+            : entry
+        )
+      );
+  
+      // Return success matching the expected type
+      return { success: true, error: null };
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "Failed to update entry";
       console.error("Update entry error:", err);
-      return { data: null, error: { message: errorMessage } };
+      const errorMessage = err instanceof Error ? err.message : "Failed to update entry";
+      return { success: false, error: { message: errorMessage } };
     }
   }, []);
+  
 
   // ==========================================================================
   // DELETE ENTRY
