@@ -21,6 +21,7 @@ export type Entry = {
   text: string;
   date: string;
   username: string;
+  avatar_url?:string;
   created_at: string;
   image_url?: string;
   love_count: number;
@@ -47,8 +48,9 @@ type SupabaseEntryResponse = {
   image_url?: string;
   user_id: string;
   users_public: {
-    username: string;
-  } | null;
+    username: string | null;
+    avatar_url: string | null;
+  }
   entry_actions: Array<{
     love_count: number | null;
     hate_count: number | null;
@@ -96,7 +98,7 @@ export function useEntries() {
           image_url,
           created_at,
           user_id,
-          users_public!inner(username),
+          users_public(username, avatar_url),
           entry_actions(love_count, hate_count),
           interpretation,
           tags,
@@ -105,7 +107,7 @@ export function useEntries() {
             text,
             created_at,
             user_id,
-            users_public!inner(username)
+            users_public(username, avatar_url)
           )
         `)
         .order("created_at", { ascending: false });
@@ -159,6 +161,7 @@ export function useEntries() {
           text: typedEntry.text,
           date: typedEntry.date,
           username: typedEntry.users_public?.username || "Anonymous",
+          avatar_url: typedEntry.users_public?.avatar_url || "https://jeggqdlnxakucuwlbchz.supabase.co/storage/v1/object/public/user-images/level1.jpeg",
           created_at: typedEntry.created_at,
           image_url: typedEntry.image_url,
           love_count,

@@ -22,6 +22,7 @@ type EntryListProps = {
     entryId: string, 
     commentId: string
   ) => Promise<{ success: boolean; error: { message: string } | null }>;
+  onViewUserProfile?: (userId: string) => void;
 };
 
 export default function EntryList({ 
@@ -33,7 +34,8 @@ export default function EntryList({
   onDelete,
   onToggleReaction,
   onAddComment,
-  onDeleteComment
+  onDeleteComment,
+  onViewUserProfile
 }: EntryListProps) {
   // Loading state
   if (loading) {
@@ -86,6 +88,7 @@ export default function EntryList({
           onAddComment={onAddComment}
           onDeleteComment={onDeleteComment}
           onUpdateEntry={onUpdateEntry}
+          onViewUserProfile={onViewUserProfile}
         />
       ))}
     </ul>

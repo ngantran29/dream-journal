@@ -23,6 +23,7 @@ type Props = {
     entryId: string, 
     commentId: string
   ) => Promise<{ success: boolean; error: { message: string } | null }>;
+  onViewUserProfile?: (userId: string) => void;
 };
 
 export default function EntryCard({ 
@@ -32,7 +33,8 @@ export default function EntryCard({
   onUpdateEntry,
   onToggleReaction,
   onAddComment,
-  onDeleteComment
+  onDeleteComment,
+  onViewUserProfile,
 }: Props) {
   const [expandedText, setExpandedText] = useState(false);
   const [showComments, setShowComments] = useState(false);
@@ -135,6 +137,12 @@ export default function EntryCard({
     // If successful, component will unmount so no need to reset loading state
   };
 
+  const handleUserClick = () => {
+    if (onViewUserProfile && entry.user_id) {
+      onViewUserProfile(entry.user_id);
+    }
+  };
+
   // Format date for display
   const formattedDate = new Date(entry.created_at).toLocaleDateString("en-US", {
     month: "short",
@@ -156,12 +164,14 @@ export default function EntryCard({
           {/* User Info */}
           <div className="flex items-center gap-3 mb-2">
             <img 
-              src="https://jeggqdlnxakucuwlbchz.supabase.co/storage/v1/object/public/user-images/level2.jpeg" 
+              src={entry.avatar_url}   
               alt={`${entry.username}'s profile`}
-              className="w-12 h-12 rounded-full object-cover" 
+              className="w-12 h-12 rounded-full object-cover cursor-pointer hover:opacity-80" 
+              onClick={handleUserClick}
+              
             /> 
             <div>
-              <span className="font-bold text-white-500">{entry.username}</span>
+              <span className="font-bold text-white-500 cursor-pointer hover:opacity-80 hover:underline transition-colors" onClick={handleUserClick}>{entry.username}</span>
               <div className="text-sm text-gray-400">{formattedDate}</div>
             </div>
           </div>

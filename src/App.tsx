@@ -1,17 +1,15 @@
-import EntriesView from "./pages/EntriesView";
-import Entry from "./pages/Entry";
 import { Route, Routes } from "react-router-dom";
+import EntriesView from "./pages/EntriesView";
+import UserProfile from "./pages/UserProfile";
 
 function App() {
   return (
-    <>
-      <Routes>
-        <Route path="/" element={<EntriesView />} />
-        <Route path="/Entry/:id" element={<Entry />} />
-        <Route path="/entries" element={<EntriesView />} />
-        <Route path="*" element={<EntriesView />} />
-      </Routes>
-    </>
+    <Routes>
+      <Route path="/" element={<EntriesView />} />
+      <Route path="/entries" element={<EntriesView />} />
+      <Route path="/profile/:userId" element={<UserProfile />} />
+      <Route path="*" element={<EntriesView />} />
+    </Routes>
   );
 }
 

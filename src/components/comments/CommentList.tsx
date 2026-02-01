@@ -213,14 +213,14 @@ export default function CommentList({ entry, userId, onAddComment, onDeleteComme
           <button
             onClick={handleAddComment}
             disabled={!userId || isSubmitting || !commentText.trim()}
-            className="px-4 py-2 rounded bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-4 py-2 rounded font-bold text-white hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isSubmitting ? "Posting..." : "Post Comment"}
           </button>
 
           {/* Emoji Picker */}
           {showEmojiPicker && (
-            <div className="absolute bottom-full left-0 mb-2 z-50 w-80 max-w-full shadow-lg bg-white rounded-lg">
+            <div className="absolute bottom-full left-0 mb-2 z-50 w-80 max-w-full shadow-lg rounded-lg">
               <EmojiPicker onEmojiSelect={insertEmoji}>
                 <EmojiPicker.Header>
                   <EmojiPicker.Input placeholder="Search emoji" hideIcon />

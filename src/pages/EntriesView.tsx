@@ -8,6 +8,7 @@ import { signInWithGoogle, signOut } from "../integrations/supabase/auth";
 import { supabase } from "../integrations/supabase/client";
 import { toast } from "sonner";
 import { EmojiPicker } from "@ferrucc-io/emoji-picker";
+import { useNavigate } from "react-router-dom";
 
 type FilterBy = "all" | "date" | "reactions" | "tags" ;
 
@@ -24,6 +25,14 @@ export default function EntriesView() {
     addComment,
     deleteComment
   } = useEntries();
+
+    // Navigation state
+    const navigate = useNavigate();
+
+    const handleViewUserProfile = (userId: string) => {
+      // Instead of setting state, we change the URL
+      navigate(`/profile/${userId}`);
+    };
 
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
 
@@ -476,7 +485,7 @@ export default function EntriesView() {
           <button
             type="button"
             onClick={() => setShowEmojiPicker((v) => !v)}
-            className="ml-auto px-3 py-2 rounded bg-neutral-700 hover:bg-neutral-600 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="auto px-3 py-2 rounded hover:bg-neutral-600 disabled:opacity-50 disabled:cursor-not-allowed"
             disabled={isCreating}
             title="Add emoji"
           >
@@ -485,7 +494,7 @@ export default function EntriesView() {
 
           {/* Emoji Picker */}
           {showEmojiPicker && (
-            <div className="absolute bottom-full left-0 mb-2 z-50 w-80 max-w-full shadow-lg bg-white rounded-lg">
+            <div className="absolute bottom-full left-0 mb-2 z-50 w-80 max-w-full shadow-lg rounded-lg">
               <EmojiPicker onEmojiSelect={insertEmoji}>
                 <EmojiPicker.Header>
                   <EmojiPicker.Input placeholder="Search emoji" hideIcon />
@@ -499,10 +508,10 @@ export default function EntriesView() {
 
           <button
             type="submit"
-            className="px-4 py-2 rounded bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-4 py-2 font-bold rounded bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
             disabled={isCreating || !user}
           >
-            {isCreating ? "Publishing..." : "Publish Entry"}
+            {isCreating ? "Publishing..." : "Publish Entry and Generate Interpretation"}
           </button>
         </div>
 
@@ -657,6 +666,7 @@ export default function EntriesView() {
         onAddComment={addComment}
         onDeleteComment={deleteComment}
         onUpdateEntry={updateEntry}
+        onViewUserProfile={handleViewUserProfile}
       />
 
       {/* See More / Show Less Button */}

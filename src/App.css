@@ -13,8 +13,9 @@ body {
 
 .app-container {
   max-width: 500px; /* center content with max width */
+  display: flex;
   margin: 0 auto;
-  padding: 16px;
+  padding: 1rem;
   display: flex;
   flex-direction: column;
   align-items: center; /* center cards horizontally */
