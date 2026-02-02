@@ -37,12 +37,12 @@ Deno.serve(async (req) => {
       properties: {
         interpretation: {
           type: SchemaType.STRING,
-          description: "In 1 sentence, analyze this dream using down-to-earth language. In 1-2 sentence, provide relevant advice for Life and/or Career and/or Health and/or Relationship",
+          description: "In 1 sentence, analyze this dream using down-to-earth language. In 1-2 sentence, provide action-oriented advice in real life for Life and/or Career and/or Health and/or Relationship",
         },
         tags: {
           type: SchemaType.ARRAY,
           items: { type: SchemaType.STRING },
-          description: "A list of 3-5 relevant tags with at least 1 tag from the categories Love, Life, Relationship, Job, Career, Health.",
+          description: "A list of 3 tags with at least 1 tag from the list of Love, Life, Relationship, Job, Career, Health.",
         },
       },
       required: ["interpretation", "tags"],

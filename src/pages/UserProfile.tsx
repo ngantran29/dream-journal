@@ -1,4 +1,5 @@
-import { useMemo } from "react";
+import React, { useMemo } from "react";
+import { motion } from "framer-motion";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { useEntries } from "../hooks/useEntries";
@@ -42,6 +43,25 @@ export default function UserProfile() {
     return { entryCount, likes, comments };
   }, [userEntries]);
 
+  const tagStats = useMemo(() => {
+    const map: Record<string, number> = {};
+    userEntries.forEach((e) => {
+    e.tags?.forEach((tag: string) => {
+    map[tag] = (map[tag] || 0) + 1;
+    });
+    });
+    return Object.entries(map)
+    .map(([tag, count]) => ({ tag, count }))
+    .sort((a, b) => b.count - a.count);
+    }, [userEntries]);
+    
+    const [activeTag, setActiveTag] = React.useState<string | null>(null);
+    
+    const filteredEntries = useMemo(() => {
+    if (!activeTag) return userEntries;
+    return userEntries.filter((e) => e.tags?.includes(activeTag));
+    }, [userEntries, activeTag]);
+
   const handleBack = () => navigate("/");
 
   const avatarUrl = userEntries[0]?.avatar_url;
@@ -65,7 +85,7 @@ export default function UserProfile() {
               "https://jeggqdlnxakucuwlbchz.supabase.co/storage/v1/object/public/user-images/level1.jpeg"
             }
             alt="Avatar"
-            className="w-32 h-32 rounded-full object-cover"
+            className="w-40 h-40 rounded-full object-cover"
           />
           <h1 className="text-xl font-bold">{username}</h1>
         </div>
@@ -85,6 +105,54 @@ export default function UserProfile() {
             <div className="text-gray-600">Comments</div>
           </div>
         </div>
+
+      {/* Tag bubbles */}
+      {tagStats.length > 0 && (
+        <div className="mt-6 flex flex-wrap justify-center items-center gap-0">
+          {tagStats
+            .sort((a, b) => b.count - a.count) // largest first → center bias
+            .map(({ tag, count }) => {
+              const scale = Math.min(2.2, 1 + count * 0.25);
+              const padding = 12 + count * 4;
+
+              return (
+                <motion.div
+                  key={tag}
+                  layout
+                  whileHover={{ scale: scale * 1.05 }}
+                  onClick={() =>
+                    setActiveTag(activeTag === tag ? null : tag)
+                  }
+                  className="rounded-full cursor-pointer flex items-center justify-center select-none"
+                  style={{
+                    minWidth: 40,
+                    minHeight: 40,
+                    padding,
+                    margin: "-6px", // packing magic
+                    opacity: !activeTag || activeTag === tag ? 1 : 0.7,
+                    backgroundColor: `hsl(215, 70%, ${
+                      85 - count * 6
+                    }%)`,
+                    color: "#0f172a",
+                  }}
+                >
+                  <span
+                    className="text-center leading-tight"
+                    style={{
+                      fontSize: `${12 + count * 2}px`,
+                      fontWeight: 500,
+                    }}
+                  >
+                    {tag}
+                    <div className="text-[10px] opacity-70">
+                      {count}
+                    </div>
+                  </span>
+                </motion.div>
+              );
+            })}
+        </div>
+      )}
       </header>
 
       {/* Entries */}
@@ -108,7 +176,7 @@ export default function UserProfile() {
       )}
 
       <EntryList
-        entries={userEntries}
+        entries={filteredEntries}
         userId={user?.id || null}
         loading={loading}
         error={error}
