@@ -1,5 +1,5 @@
 // src/hooks/useEntries.ts
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "../integrations/supabase/client";
 
 // ============================================================================
@@ -47,7 +47,7 @@ type SupabaseEntryResponse = {
   created_at: string;
   image_url?: string;
   user_id: string;
-  users_public: {
+  user_profile_summary: {
     username: string | null;
     avatar_url: string | null;
   }
@@ -61,7 +61,7 @@ type SupabaseEntryResponse = {
     text: string;
     created_at: string;
     user_id: string;
-    users_public: {
+    user_profile_summary: {
       username: string;
     } | null;
   }> | null;
@@ -73,44 +73,72 @@ type SupabaseEntryResponse = {
 // HOOK
 // ============================================================================
 
+const PAGE_SIZE = 5;
+
 export function useEntries() {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<FetchError | null>(null);
+  const [hasMore, setHasMore] = useState(false);
+  const offsetRef = useRef(0);
+  const filtersRef = useRef({ filterBy: "all", selectedDate: "", selectedTag: "", userId: "" });
 
   // ==========================================================================
   // FETCH ENTRIES
   // ==========================================================================
-  
-  const fetchEntries = useCallback(async () => {
+
+  const buildQuery = (offset: number) => {
+    const { filterBy, selectedDate, selectedTag } = filtersRef.current;
+    let query = supabase
+      .from("entries")
+      .select(`
+        id,
+        date,
+        title,
+        text,
+        image_url,
+        created_at,
+        user_id,
+        user_profile_summary(username, avatar_url),
+        entry_actions(love_count, hate_count),
+        interpretation,
+        tags,
+        comments(
+          id,
+          text,
+          created_at,
+          user_id,
+          user_profile_summary(username, avatar_url)
+        )
+      `, { count: "exact" })
+      .order("created_at", { ascending: false })
+      .range(offset, offset + PAGE_SIZE - 1);
+
+    const { userId } = filtersRef.current;
+    if (userId) {
+      query = query.eq("user_id", userId);
+    }
+    if (filterBy === "date" && selectedDate) {
+      query = query.eq("date", selectedDate);
+    }
+    if (filterBy === "tags" && selectedTag) {
+      query = query.contains("tags", [selectedTag]);
+    }
+
+    return query;
+  };
+
+  const fetchEntries = useCallback(async (
+    reset = true,
+    filters?: { filterBy: string; selectedDate: string; selectedTag: string; userId?: string }
+  ) => {
+    if (filters) filtersRef.current = { ...filtersRef.current, ...filters };
     try {
       setLoading(true);
       setError(null);
 
-      // Single optimized query with joins
-      const { data: entriesData, error: entriesError } = await supabase
-        .from("entries")
-        .select(`
-          id,
-          date,
-          title,
-          text,
-          image_url,
-          created_at,
-          user_id,
-          users_public(username, avatar_url),
-          entry_actions(love_count, hate_count),
-          interpretation,
-          tags,
-          comments(
-            id,
-            text,
-            created_at,
-            user_id,
-            users_public(username, avatar_url)
-          )
-        `)
-        .order("created_at", { ascending: false });
+      const offset = reset ? 0 : offsetRef.current;
+      const { data: entriesData, error: entriesError, count } = await buildQuery(offset);
 
       if (entriesError) throw entriesError;
 
@@ -147,7 +175,7 @@ export function useEntries() {
             id: comment.id,
             entry_id: typedEntry.id,
             text: comment.text,
-            username: comment.users_public?.username || "Anonymous",
+            username: comment.user_profile_summary?.username || "Anonymous",
             created_at: comment.created_at,
             user_id: comment.user_id,
           }))
@@ -160,8 +188,8 @@ export function useEntries() {
           title: typedEntry.title,
           text: typedEntry.text,
           date: typedEntry.date,
-          username: typedEntry.users_public?.username || "Anonymous",
-          avatar_url: typedEntry.users_public?.avatar_url || "https://jeggqdlnxakucuwlbchz.supabase.co/storage/v1/object/public/user-images/level1.jpeg",
+          username: typedEntry.user_profile_summary?.username || "Anonymous",
+          avatar_url: typedEntry.user_profile_summary?.avatar_url || "https://jeggqdlnxakucuwlbchz.supabase.co/storage/v1/object/public/user-images/level1.jpeg",
           created_at: typedEntry.created_at,
           image_url: typedEntry.image_url,
           love_count,
@@ -174,7 +202,15 @@ export function useEntries() {
         };
       });
 
-      setEntries(transformed);
+      const newOffset = offset + transformed.length;
+      offsetRef.current = newOffset;
+      setHasMore(newOffset < (count ?? 0));
+
+      if (reset) {
+        setEntries(transformed);
+      } else {
+        setEntries(prev => [...prev, ...transformed]);
+      }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Failed to fetch entries";
       setError({ message: errorMessage });
@@ -184,9 +220,11 @@ export function useEntries() {
     }
   }, []);
 
+  const fetchMore = useCallback(() => fetchEntries(false), [fetchEntries]);
+
   // Initial fetch
   useEffect(() => {
-    fetchEntries();
+    fetchEntries(true);
   }, [fetchEntries]);
 
   // ==========================================================================
@@ -214,7 +252,7 @@ export function useEntries() {
           image_url,
           created_at,
           user_id,
-          users_public!inner(username)
+          user_profile_summary!inner(username)
         `)
         .single();
 
@@ -230,7 +268,7 @@ export function useEntries() {
         created_at: string;
         image_url?: string;
         user_id: string;
-        users_public: { username: string } | null;
+        user_profile_summary: { username: string } | null;
         interpretation: string;
         tags: string[];
       };
@@ -240,7 +278,7 @@ export function useEntries() {
         title: typedData.title,
         text: typedData.text,
         date: typedData.date,
-        username: typedData.users_public?.username || "Anonymous",
+        username: typedData.user_profile_summary?.username || "Anonymous",
         created_at: typedData.created_at,
         image_url: typedData.image_url,
         love_count: 0,
@@ -469,7 +507,7 @@ export function useEntries() {
           text,
           created_at,
           user_id,
-          users_public!inner(username)
+          user_profile_summary!inner(username)
         `)
         .single();
 
@@ -481,14 +519,14 @@ export function useEntries() {
         text: string;
         created_at: string;
         user_id: string;
-        users_public: { username: string } | null;
+        user_profile_summary: { username: string } | null;
       };
 
       const newComment: Comment = {
         id: typedData.id,
         entry_id: entryId,
         text: typedData.text,
-        username: typedData.users_public?.username || "Anonymous",
+        username: typedData.user_profile_summary?.username || "Anonymous",
         created_at: typedData.created_at,
         user_id: typedData.user_id,
       };
@@ -554,20 +592,22 @@ export function useEntries() {
     entries,
     loading,
     error,
-    
+    hasMore,
+
     // Entry operations
     fetchEntries,
+    fetchMore,
     createEntry,
     updateEntry,
     deleteEntry,
-    
+
     // Reaction operations
     toggleReaction,
-    
+
     // Comment operations
     addComment,
     deleteComment,
-    
+
     // Manual state setter (use sparingly)
     setEntries,
   };

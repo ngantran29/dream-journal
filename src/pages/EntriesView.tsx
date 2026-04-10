@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
+import { motion } from "framer-motion";
 import { useAuth } from "../hooks/useAuth";
 import { useEntries } from "../hooks/useEntries";
 import EntryList from "../components/entries/EntryList";
@@ -10,14 +11,15 @@ import { toast } from "sonner";
 import { EmojiPicker } from "@ferrucc-io/emoji-picker";
 import { useNavigate } from "react-router-dom";
 
-type FilterBy = "all" | "date" | "reactions" | "tags" ;
-
 export default function EntriesView() {
   const { user } = useAuth();
-  const { 
-    entries, 
+  const {
+    entries,
     loading,
     error,
+    hasMore,
+    fetchEntries,
+    fetchMore,
     createEntry,
     updateEntry,
     deleteEntry,
@@ -74,15 +76,17 @@ export default function EntriesView() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // --- Pagination state
-  const [showAll, setShowAll] = useState(false);
-  const ENTRIES_PER_PAGE = 5;
-
-  // --- Filter state
-  const [filterBy, setFilterBy] = useState<FilterBy>("all");
-  const [selectedDate, setSelectedDate] = useState("");
-  const [selectedTag, setSelectedTag] = useState("");
-  const [minReactions, setMinReactions] = useState(0);
+  // --- Summary Box state
+  const [summaryTab, setSummaryTab] = useState<"tags" | "calendar" | "latest">("tags");
+  const [allTagsList, setAllTagsList] = useState<string[]>([]);
+  const [totalTagCount, setTotalTagCount] = useState(0);
+  const [entryDates, setEntryDates] = useState<string[]>([]);
+  const [calMonth, setCalMonth] = useState(() => new Date());
+  const [activeTag, setActiveTag] = useState<string | null>(null);
+  const [showAllTags, setShowAllTags] = useState(false);
+  const TOP_TAGS = 10;
+  const DAY_LABELS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+  const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 
   // --- Entry form state
   const [title, setTitle] = useState("");
@@ -98,62 +102,50 @@ export default function EntriesView() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [isUploadingImages, setIsUploadingImages] = useState(false);
 
-  // Get unique values for filter options
-  const uniqueDates = useMemo(() => {
-    const dates = entries.map(e => e.date).filter(Boolean);
-    return [...new Set(dates)].sort((a, b) => b.localeCompare(a));
-  }, [entries]);
-
-  const uniqueTags = useMemo(() => {
-    const tags = entries.flatMap(e => e.tags || []);
-    return [...new Set(tags)].sort();
-  }, [entries]);
-
-  // Filter and sort entries
-  const filteredEntries = useMemo(() => {
-    let result = [...entries];
-    
-    switch (filterBy) {
-      case "date":
-        if (selectedDate) {
-          result = result.filter(e => e.date === selectedDate);
-        }
-        result.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-        break;
-      
-      case "reactions":
-        result = result.filter(e => (e.love_count || 0) >= minReactions);
-        result.sort((a, b) => (b.love_count || 0) - (a.love_count || 0));
-        break;
-      
-      case "tags":
-        if (selectedTag) {
-          result = result.filter(e => e.tags?.includes(selectedTag));
-        }
-        result.sort((a, b) => (b.tags?.length || 0) - (a.tags?.length || 0));
-        break;
-      
-      case "all":
-      default:
-        result.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-        break;
+  // Fetch all entry dates + tags from DB (no user filter)
+  useEffect(() => {
+    async function fetchMeta() {
+      const { data } = await supabase.from("entries").select("date, tags");
+      const rows = data || [];
+      setEntryDates(rows.map((r) => r.date).filter(Boolean));
+      const allTags = rows.flatMap((r) => r.tags || []);
+      setAllTagsList(allTags);
+      setTotalTagCount(new Set(allTags).size);
     }
-    
-    return result;
-  }, [entries, filterBy, selectedDate, selectedTag, minReactions]);
+    fetchMeta();
+  }, []);
 
-  // Get entries to display based on showAll state
-  const displayedEntries = showAll ? filteredEntries : filteredEntries.slice(0, ENTRIES_PER_PAGE);
-  const hasMoreEntries = filteredEntries.length > ENTRIES_PER_PAGE;
+  const tagStats = useMemo(() => {
+    const map: Record<string, number> = {};
+    allTagsList.forEach((tag) => { map[tag] = (map[tag] || 0) + 1; });
+    return Object.entries(map).map(([tag, count]) => ({ tag, count })).sort((a, b) => b.count - a.count);
+  }, [allTagsList]);
 
-  // Reset filters when changing filter type
-  const handleFilterChange = (newFilter: FilterBy) => {
-    setFilterBy(newFilter);
-    setShowAll(false);
-    setSelectedDate("");
-    setSelectedTag("");
-    setMinReactions(0);
-  };
+  const entryDateSet = useMemo(() => new Set(entryDates), [entryDates]);
+
+  const calendarDays = useMemo(() => {
+    const year = calMonth.getFullYear();
+    const month = calMonth.getMonth();
+    const firstDay = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const days: (number | null)[] = Array(firstDay).fill(null);
+    for (let d = 1; d <= daysInMonth; d++) days.push(d);
+    return { year, month, days };
+  }, [calMonth]);
+
+  function toDateStr(year: number, month: number, day: number) {
+    return `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  }
+  function prevMonth() { setCalMonth((d) => new Date(d.getFullYear(), d.getMonth() - 1, 1)); }
+  function nextMonth() { setCalMonth((d) => new Date(d.getFullYear(), d.getMonth() + 1, 1)); }
+
+  function handleSummaryTab(tab: "tags" | "calendar" | "latest") {
+    setSummaryTab(tab);
+    if (tab === "latest") {
+      setActiveTag(null);
+      fetchEntries(true, { filterBy: "all", selectedDate: "", selectedTag: "" });
+    }
+  }
 
   const addTextToTitle = () => {
     if (!generatedText) return;
@@ -341,7 +333,7 @@ export default function EntriesView() {
             className="w-40 h-40 rounded-full object-cover" 
           /> 
         </div>
-        <h1 className="font-bold text-lg">Dream. Visualize. Interpret. Connect.</h1>
+        <h1 className="font-bold text-lg">AI-visualize your dream journal, reveal deep insights, share the learnings and inspirations.</h1>
 
         {!user && (
           <button
@@ -354,6 +346,12 @@ export default function EntriesView() {
         {user && (
           <div className="flex justify-center items-center gap-4">
             <span className="text-gray-700">Signed in as {user.email}</span>
+            <button
+              onClick={() => navigate(`/profile/${user.id}`)}
+              className="px-3 py-1 rounded bg-blue-500 text-white hover:bg-blue-600"
+            >
+              View Profile
+            </button>
             <button
               onClick={() => signOut()}
               className="px-3 py-1 rounded bg-red-500 text-white hover:bg-red-600"
@@ -368,7 +366,7 @@ export default function EntriesView() {
       <div className="mb-6 p-6 border-b border-neutral-700 shadow-sm w-full flex flex-col gap-4">
         
         <p className="text-center overflow-mb-6">
-        AI-visualize your dream journal, reveal deep insights, share the learnings and inspirations.
+        Dream. Visualize. Interpret. Connect.
         </p>
 
         <h2 className="mb-6 overflow-mb-6 p-2 w-full">Generate Your Ideas</h2>
@@ -518,117 +516,116 @@ export default function EntriesView() {
 
       </form>
 
-      {/* Navigation Tabs with Filters */}
-      <h2 className="mb-6 overflow-mb-6 p-2 w-full">Explore New Inspirations</h2>
-      <div className="mb-6 border border-gray-300 rounded-lg overflow-mb-6 p-6 w-full border-b border-neutral-700 gap-4">
-        {/* Tabs */}
-        <div className="flex">
-          <button
-            onClick={() => handleFilterChange("all")}
-            className={`flex-1 px-4 py-3 font-medium transition-colors ${
-              filterBy === "all"
-                ? "bg-blue-500 text-white"
-                : "text-gray-600 hover:bg-gray-100"
-            }`}
-          >
-            Newest
-          </button>
-          <button
-            onClick={() => handleFilterChange("date")}
-            className={`flex-1 px-4 py-3 font-medium transition-colors ${
-              filterBy === "date"
-                ? "bg-blue-500 text-white"
-                : "text-gray-600 hover:bg-gray-100"
-            }`}
-          >
-            Date
-          </button>
-          <button
-            onClick={() => handleFilterChange("reactions")}
-            className={`flex-1 px-4 py-3 font-medium transition-colors ${
-              filterBy === "reactions"
-                ? "bg-blue-500 text-white"
-                : "text-gray-600 hover:bg-gray-100"
-            }`}
-          >
-            Likes
-          </button>
-          <button
-            onClick={() => handleFilterChange("tags")}
-            className={`flex-1 px-4 py-3 font-medium transition-colors ${
-              filterBy === "tags"
-                ? "bg-blue-500 text-white"
-                : "text-gray-600 hover:bg-gray-100"
-            }`}
-          >
-            Tags
-          </button>
+      {/* Profile Summary Box */}
+      <h2 className="mb-3 p-2 w-full">Explore New Inspirations</h2>
+      <div className="mb-6 rounded-xl border border-neutral-700 overflow-hidden w-full">
+        {/* Tab bar */}
+        <div className="flex border-b border-neutral-700">
+          {(["tags", "calendar", "latest"] as const).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => handleSummaryTab(tab)}
+              className={`flex-1 py-2 text-sm font-medium transition-colors ${
+                summaryTab === tab
+                  ? "bg-neutral-800 text-blue-400 border-b-2 border-blue-400"
+                  : "text-gray-500 hover:text-gray-300"
+              }`}
+            >
+              {tab === "tags" ? `Tags (${totalTagCount})` : tab === "calendar" ? "Calendar" : "Latest"}
+            </button>
+          ))}
         </div>
 
-        {/* Filter Options */}
-        {filterBy !== "all" && (
-          <div className="p-4">
-            {filterBy === "date" && (
-              <div className="flex flex-col gap-2">
-                <label className="text-sm font-medium text-gray-700">
-                  Select Date:
-                </label>
-                <select
-                  value={selectedDate}
-                  onChange={(e) => setSelectedDate(e.target.value)}
-                  className="p-2 border rounded focus:outline-none focus:ring focus:ring-blue-200"
-                >
-                  <option value="">All Dates</option>
-                  {uniqueDates.map(date => (
-                    <option key={date} value={date}>
-                      {new Date(date).toLocaleDateString()}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
+        <div className="p-4">
+          {/* Tab: Tags */}
+          {summaryTab === "tags" && (
+            <div className="p-4">
+              {tagStats.length === 0 ? (
+                <p className="text-center text-gray-500 text-sm py-4">No tags yet.</p>
+              ) : (
+                <>
+                  <div className="flex flex-wrap justify-center items-center gap-2">
+                    {(showAllTags ? tagStats : tagStats.slice(0, TOP_TAGS)).map(({ tag, count }) => {
+                      const fontSize = Math.min(14, 10 + count);
+                      const padding = Math.max(16, 12 + count * 4);
+                      return (
+                        <motion.div
+                          key={tag}
+                          layout
+                          whileHover={{ scale: 1.08 }}
+                          onClick={() => {
+                            const next = activeTag === tag ? null : tag;
+                            setActiveTag(next);
+                            if (next) {
+                              fetchEntries(true, { filterBy: "tags", selectedTag: next, selectedDate: "" });
+                            } else {
+                              fetchEntries(true, { filterBy: "all", selectedTag: "", selectedDate: "" });
+                            }
+                          }}
+                          className="rounded-full cursor-pointer flex flex-col items-center justify-center select-none shrink-0"
+                          style={{
+                            padding,
+                            aspectRatio: "1 / 1",
+                            minWidth: fontSize * tag.length * 0.65 + padding * 2,
+                            opacity: !activeTag || activeTag === tag ? 1 : 0.5,
+                            backgroundColor: `hsl(215, 70%, ${Math.max(30, 85 - count * 6)}%)`,
+                            color: "#0f172a",
+                            outline: activeTag === tag ? "2px solid #3b82f6" : "none",
+                          }}
+                        >
+                          <span className="text-center leading-tight whitespace-nowrap" style={{ fontSize, fontWeight: 600 }}>{tag}</span>
+                          <span className="text-[9px] opacity-60">{count}</span>
+                        </motion.div>
+                      );
+                    })}
+                  </div>
+                  {tagStats.length > TOP_TAGS && (
+                    <div className="mt-3 text-center">
+                      <button onClick={() => setShowAllTags((v) => !v)} className="text-sm text-blue-400 hover:underline">
+                        {showAllTags ? "Show less" : `Show all ${tagStats.length} tags`}
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
 
-            {filterBy === "reactions" && (
-              <div className="flex flex-col gap-2">
-                <label className="text-sm font-medium text-gray-700">
-                  Minimum Reactions: {minReactions}
-                </label>
-                <input
-                  type="range"
-                  min="0"
-                  max="20"
-                  value={minReactions}
-                  onChange={(e) => setMinReactions(Number(e.target.value))}
-                  className="w-full"
-                />
+          {/* Tab: Calendar */}
+          {summaryTab === "calendar" && (
+            <div className="p-5">
+              <div className="flex items-center justify-between mb-4 w-full">
+                <button onClick={prevMonth} className="text-gray-400 hover:text-white px-4 text-xl">‹</button>
+                <span className="text-base font-semibold">{MONTH_NAMES[calendarDays.month]} {calendarDays.year}</span>
+                <button onClick={nextMonth} className="text-gray-400 hover:text-white px-4 text-xl">›</button>
               </div>
-            )}
-
-            {filterBy === "tags" && (
-              <div className="flex flex-col gap-2">
-                <label className="text-sm font-medium text-gray-700">
-                  Select Tag:
-                </label>
-                <select
-                  value={selectedTag}
-                  onChange={(e) => setSelectedTag(e.target.value)}
-                  className="p-2 border rounded focus:outline-none focus:ring focus:ring-blue-200"
-                >
-                  <option value="">All Tags</option>
-                  {uniqueTags.map(tag => (
-                    <option key={tag} value={tag}>
-                      {tag}
-                    </option>
-                  ))}
-                </select>
+              <div className="grid grid-cols-7 mb-2 w-full">
+                {DAY_LABELS.map((d) => (
+                  <div key={d} className="text-center text-xs text-gray-500 font-medium py-1">{d}</div>
+                ))}
               </div>
-            )}
-          </div>
-        )}
-
-        {/* Results Count */}
-        <div className="px-4 py-2 text-sm text-gray-600">
-          Showing {displayedEntries.length} of {filteredEntries.length} entries
+              <div className="grid grid-cols-7 gap-y-2 w-full">
+                {calendarDays.days.map((day, i) => {
+                  if (!day) return <div key={`empty-${i}`} />;
+                  const dateStr = toDateStr(calendarDays.year, calendarDays.month, day);
+                  const hasEntry = entryDateSet.has(dateStr);
+                  return (
+                    <div
+                      key={dateStr}
+                      onClick={() => {
+                        if (!hasEntry) return;
+                        fetchEntries(true, { filterBy: "date", selectedDate: dateStr, selectedTag: "" });
+                      }}
+                      className={`text-center text-sm rounded-full flex items-center justify-center aspect-square w-full transition-colors
+                        ${hasEntry ? "bg-blue-500 text-white font-bold cursor-pointer hover:bg-blue-400" : "text-gray-400"}`}
+                    >
+                      {day}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -646,18 +643,14 @@ export default function EntriesView() {
         </div>
       )}
 
-      {!loading && !error && filteredEntries.length === 0 && (
+      {!loading && !error && entries.length === 0 && (
         <div className="text-center py-8">
-          <p className="text-gray-500">
-            {filterBy === "all" 
-              ? "No entries yet. Create the first one!"
-              : "No entries match the current filter."}
-          </p>
+          <p className="text-gray-500">No entries yet. Create the first one!</p>
         </div>
       )}
 
       <EntryList
-        entries={displayedEntries}
+        entries={entries}
         userId={user?.id || null}
         loading={loading}
         error={error}
@@ -669,14 +662,14 @@ export default function EntriesView() {
         onViewUserProfile={handleViewUserProfile}
       />
 
-      {/* See More / Show Less Button */}
-      {!loading && !error && hasMoreEntries && (
+      {/* Load More Button */}
+      {!loading && !error && hasMore && (
         <div className="text-center py-6">
           <button
-            onClick={() => setShowAll(!showAll)}
+            onClick={fetchMore}
             className="px-6 py-3 rounded bg-gray-600 text-white hover:bg-gray-700 transition-colors"
           >
-            {showAll ? "Show Less" : `See More (${filteredEntries.length - ENTRIES_PER_PAGE} more)`}
+            See More
           </button>
         </div>
       )}
