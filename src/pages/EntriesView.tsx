@@ -77,7 +77,7 @@ export default function EntriesView() {
   }, []);
 
   // --- Summary Box state
-  const [summaryTab, setSummaryTab] = useState<"tags" | "calendar" | "latest">("tags");
+  const [summaryTab, setSummaryTab] = useState<"tags" | "calendar" | "latest">("latest");
   const [allTagsList, setAllTagsList] = useState<string[]>([]);
   const [totalTagCount, setTotalTagCount] = useState(0);
   const [entryDates, setEntryDates] = useState<string[]>([]);
@@ -91,6 +91,7 @@ export default function EntriesView() {
   // --- Entry form state
   const [title, setTitle] = useState("");
   const [text, setText] = useState("");
+  const [visibility, setVisibility] = useState<"public" | "private" | "friends">("public");
   const [isCreating, setIsCreating] = useState(false);
 
   // --- AI Generator state
@@ -139,12 +140,20 @@ export default function EntriesView() {
   function prevMonth() { setCalMonth((d) => new Date(d.getFullYear(), d.getMonth() - 1, 1)); }
   function nextMonth() { setCalMonth((d) => new Date(d.getFullYear(), d.getMonth() + 1, 1)); }
 
+  const [visibilityFilter, setVisibilityFilter] = useState<"" | "public" | "private" | "friends">("");
+
   function handleSummaryTab(tab: "tags" | "calendar" | "latest") {
     setSummaryTab(tab);
     if (tab === "latest") {
       setActiveTag(null);
-      fetchEntries(true, { filterBy: "all", selectedDate: "", selectedTag: "" });
+      fetchEntries(true, { filterBy: "all", selectedDate: "", selectedTag: "", visibility: "" });
+      setVisibilityFilter("");
     }
+  }
+
+  function handleVisibilityFilter(v: "" | "public" | "private" | "friends") {
+    setVisibilityFilter(v);
+    fetchEntries(true, { filterBy: "all", selectedDate: "", selectedTag: "", visibility: v });
   }
 
   const addTextToTitle = () => {
@@ -188,7 +197,8 @@ export default function EntriesView() {
       date: new Date().toISOString().split("T")[0],
       image_url: previewImage,
       interpretation: "",
-      tags: []
+      tags: [],
+      visibility,
     });
 
     setIsCreating(false);
@@ -197,6 +207,7 @@ export default function EntriesView() {
       // Reset form
       setTitle("");
       setText("");
+      setVisibility("public");
       setGeneratedImage(null);
       setGeneratedText(null);
       setPrompt("");
@@ -271,10 +282,11 @@ export default function EntriesView() {
     try {
       toast.info("Generating image...");
 
+      const { data: { session } } = await supabase.auth.getSession();
       const { data, error } = await supabase.functions.invoke("generate-image", {
         body: { prompt, imageUrls: uploadedImageUrls || [] },
         headers: {
-          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          Authorization: `Bearer ${session?.access_token}`,
         },
       });
 
@@ -286,7 +298,9 @@ export default function EntriesView() {
       toast.success("Image generated!");
     } catch (err: any) {
       console.error(err);
-      toast.error(err.message || "Failed to generate image");
+      let msg = err.message || "Failed to generate image";
+      try { const body = await err?.context?.json?.(); if (body?.error) msg = body.error; } catch {}
+      toast.error(msg);
     } finally {
       setIsGenerating(false);
     }
@@ -301,22 +315,25 @@ export default function EntriesView() {
     try {
       toast.info("Generating text...");
 
+      const { data: { session } } = await supabase.auth.getSession();
       const { data, error } = await supabase.functions.invoke("generate-text", {
         body: { prompt },
         headers: {
-          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          Authorization: `Bearer ${session?.access_token}`,
         },
       });
 
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
-      console.log("Full response:", data);
 
       setGeneratedText(data.text);
       toast.success("Text generated!");
     } catch (err: any) {
       console.error(err);
-      toast.error(err.message || "Failed to generate text");
+      let msg = err.message || "Failed to generate text";
+      try { const body = await err?.context?.json?.(); if (body?.error) msg = body.error; } catch {}
+      toast.error(msg);
+      setGeneratedText(msg);
     } finally {
       setIsGenerating(false);
     }
@@ -325,7 +342,7 @@ export default function EntriesView() {
   return (
     <div className="app-container">
       {/* Header */}
-      <header className="text-center mb-6">
+      <header className="text-center">
         <div className="flex justify-center items-center gap-4">
           <img 
             src="https://jeggqdlnxakucuwlbchz.supabase.co/storage/v1/object/public/user-images/ChatGPT%20Image%20Jan%2017,%202026%20at%2010_44_41%20PM.png" 
@@ -333,7 +350,12 @@ export default function EntriesView() {
             className="w-40 h-40 rounded-full object-cover" 
           /> 
         </div>
-        <h1 className="font-bold text-lg">AI-visualize your dream journal, reveal deep insights, share the learnings and inspirations.</h1>
+        <h1 className="text-center overflow-mb-6">
+        Dream - Visualize - Interpret - Connect
+        </h1>
+
+        <p className="text-lg">Your dream journal with AI-visualization and deep insights interpretation. Share the learnings and inspirations with others.</p>
+        
 
         {!user && (
           <button
@@ -360,14 +382,12 @@ export default function EntriesView() {
             </button>
           </div>
         )}
+        
       </header>
 
       {/* AI Generator Panel */}
-      <div className="mb-6 p-6 border-b border-neutral-700 shadow-sm w-full flex flex-col gap-4">
+      <div className="p-6 border-b border-neutral-700 shadow-sm w-full flex flex-col gap-4">
         
-        <p className="text-center overflow-mb-6">
-        Dream. Visualize. Interpret. Connect.
-        </p>
 
         <h2 className="mb-6 overflow-mb-6 p-2 w-full">Generate Your Ideas</h2>
 
@@ -469,18 +489,44 @@ export default function EntriesView() {
           className="w-full p-3 border rounded focus:outline-none focus:ring focus:ring-blue-200 resize-y mb-3"
           disabled={isCreating}
         />
+        
+        <div
+          ref={containerRef}
+          className="flex justify-between gap-2 relative">
+
+          {/* Visibility selector */}
+          <div className="flex rounded-lg overflow-hidden w-full">
+            {(["public", "friends", "private"] as const).map((v) => (
+              <button
+                key={v}
+                type="button"
+                onClick={() => setVisibility(v)}
+                className={`flex-1 py-2 text-sm font-medium transition-colors ${
+                  visibility === v
+                    ? "bg-blue-600 text-white"
+                    : "text-gray-400 hover:text-gray-200"
+                }`}
+              >
+                {v === "public" ? "Public" : v === "friends" ? "Friends" : "Private"}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <textarea
           ref={textareaRef}
           value={text}
           onChange={(e) => setText(e.target.value)}
           placeholder="Content"
-          className="w-full p-3 border rounded focus:outline-none focus:ring focus:ring-blue-200 min-h-[120px] resize-y mb-3"
+          className="w-full p-3 border rounded focus:outline-none focus:ring focus:ring-blue-200 min-h-[120px] resize-y mb-3 mt-3"
           disabled={isCreating}
         />
+
         <div
           ref={containerRef}
           className="flex justify-between gap-2 relative">
-          <button
+
+                    <button
             type="button"
             onClick={() => setShowEmojiPicker((v) => !v)}
             className="auto px-3 py-2 rounded hover:bg-neutral-600 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -506,7 +552,8 @@ export default function EntriesView() {
 
           <button
             type="submit"
-            className="flex-1 px-4 py-2 font-bold text-blue-400 rounded text-white hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex-1 px-4 py-2 font-bold text-blue-400 rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+            style={{ color: "rgb(81 162 255)" }}
             disabled={isCreating || !user}
           >
             {isCreating ? "Publishing..." : "✨ Publish Entry and Generate Interpretation"}
@@ -518,10 +565,10 @@ export default function EntriesView() {
 
       {/* Profile Summary Box */}
       <h2 className="mb-3 p-2 w-full">Explore New Inspirations</h2>
-      <div className="mb-6 rounded-xl border border-neutral-700 overflow-hidden w-full">
+      <div className="mb-6 rounded-xl border-b border-neutral-700 overflow-hidden w-full">
         {/* Tab bar */}
-        <div className="flex border-b border-neutral-700">
-          {(["tags", "calendar", "latest"] as const).map((tab) => (
+        <div className="flex">
+          {(["latest", "tags", "calendar"] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => handleSummaryTab(tab)}
@@ -537,6 +584,22 @@ export default function EntriesView() {
         </div>
 
         <div className="p-4">
+          {/* Tab: Latest */}
+          {summaryTab === "latest" && (
+            <div className="flex justify-center py-2">
+              <select
+                value={visibilityFilter}
+                onChange={(e) => handleVisibilityFilter(e.target.value as "" | "public" | "friends" | "private")}
+                className="w-160 bg-neutral-800 text-gray-300 text-sm rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-500 text-center"
+              >
+                <option value="">All</option>
+                <option value="public">Public</option>
+                <option value="friends">Friends</option>
+                <option value="private">Private</option>
+              </select>
+            </div>
+          )}
+
           {/* Tab: Tags */}
           {summaryTab === "tags" && (
             <div className="p-4">
@@ -594,17 +657,17 @@ export default function EntriesView() {
           {/* Tab: Calendar */}
           {summaryTab === "calendar" && (
             <div className="p-5">
-              <div className="flex items-center justify-between mb-4 w-full">
-                <button onClick={prevMonth} className="text-gray-400 hover:text-white px-4 text-xl">‹</button>
-                <span className="text-base font-semibold">{MONTH_NAMES[calendarDays.month]} {calendarDays.year}</span>
-                <button onClick={nextMonth} className="text-gray-400 hover:text-white px-4 text-xl">›</button>
+              <div className="flex items-center justify-between mb-4 w-full" style={{ fontSize: 22 }}>
+                <button onClick={prevMonth} className="text-gray-400 hover:text-white">‹</button>
+                <span style={{ fontSize: 22 }}>{MONTH_NAMES[calendarDays.month]} {calendarDays.year}</span>
+                <button onClick={nextMonth} className="text-gray-400 hover:text-white">›</button>
               </div>
               <div className="grid grid-cols-7 mb-2 w-full">
                 {DAY_LABELS.map((d) => (
                   <div key={d} className="text-center text-xs text-gray-500 font-medium py-1">{d}</div>
                 ))}
               </div>
-              <div className="grid grid-cols-7 gap-y-2 w-full">
+              <div className="grid grid-cols-7 gap-y-2 w-full" style={{ fontSize: 22 }}>
                 {calendarDays.days.map((day, i) => {
                   if (!day) return <div key={`empty-${i}`} />;
                   const dateStr = toDateStr(calendarDays.year, calendarDays.month, day);
@@ -616,8 +679,8 @@ export default function EntriesView() {
                         if (!hasEntry) return;
                         fetchEntries(true, { filterBy: "date", selectedDate: dateStr, selectedTag: "" });
                       }}
-                      className={`text-center text-sm rounded-full flex items-center justify-center aspect-square w-full transition-colors
-                        ${hasEntry ? "bg-blue-500 text-white font-bold cursor-pointer hover:bg-blue-400" : "text-gray-400"}`}
+                      className={`text-center rounded-full flex items-center justify-center aspect-square w-full transition-colors ${hasEntry ? "bg-blue-500 text-white font-bold cursor-pointer hover:bg-blue-400" : "text-gray-400"}`}
+                      style={{ fontSize: 22 }}
                     >
                       {day}
                     </div>

@@ -7,9 +7,10 @@ type Props = {
   userId: string | null;
   onAddComment?: (entryId: string, text: string, userId: string) => Promise<{ data: Comment | null; error: { message: string } | null }>;
   onDeleteComment?: (entryId: string, commentId: string) => Promise<{ success: boolean; error: { message: string } | null }>;
+  onViewUserProfile?: (userId: string) => void;
 };
 
-export default function CommentList({ entry, userId, onAddComment, onDeleteComment }: Props) {
+export default function CommentList({ entry, userId, onAddComment, onDeleteComment, onViewUserProfile }: Props) {
   const [commentText, setCommentText] = useState("");
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [replyingTo, setReplyingTo] = useState<Comment | null>(null);
@@ -132,7 +133,10 @@ export default function CommentList({ entry, userId, onAddComment, onDeleteComme
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">
-                      <span className="font-bold text-sm">{comment.username}</span>
+                      <span
+                        className={`font-bold text-sm ${onViewUserProfile ? "cursor-pointer hover:underline hover:text-blue-400" : ""}`}
+                        onClick={() => onViewUserProfile && comment.user_id && onViewUserProfile(comment.user_id)}
+                      >{comment.username}</span>
                       <span className="text-xs text-gray-500">{commentDate}</span>
                     </div>
                     <p className="text-sm whitespace-pre-wrap">{comment.text}</p>

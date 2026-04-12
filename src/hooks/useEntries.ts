@@ -15,6 +15,8 @@ export type Comment = {
   user_id: string;
 };
 
+export type Visibility = "public" | "private" | "friends";
+
 export type Entry = {
   id: string;
   title: string;
@@ -31,6 +33,7 @@ export type Entry = {
   userReaction?: "love" | "hate" | null;
   interpretation: string;
   tags: string[];
+  visibility: Visibility;
 };
 
 type FetchError = {
@@ -47,6 +50,7 @@ type SupabaseEntryResponse = {
   created_at: string;
   image_url?: string;
   user_id: string;
+  visibility: Visibility;
   user_profile_summary: {
     username: string | null;
     avatar_url: string | null;
@@ -81,14 +85,14 @@ export function useEntries() {
   const [error, setError] = useState<FetchError | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const offsetRef = useRef(0);
-  const filtersRef = useRef({ filterBy: "all", selectedDate: "", selectedTag: "", userId: "" });
+  const filtersRef = useRef({ filterBy: "all", selectedDate: "", selectedTag: "", userId: "", visibility: "" });
 
   // ==========================================================================
   // FETCH ENTRIES
   // ==========================================================================
 
   const buildQuery = (offset: number) => {
-    const { filterBy, selectedDate, selectedTag } = filtersRef.current;
+    const { filterBy, selectedDate, selectedTag, visibility } = filtersRef.current;
     let query = supabase
       .from("entries")
       .select(`
@@ -99,6 +103,7 @@ export function useEntries() {
         image_url,
         created_at,
         user_id,
+        visibility,
         user_profile_summary(username, avatar_url),
         entry_actions(love_count, hate_count),
         interpretation,
@@ -124,13 +129,16 @@ export function useEntries() {
     if (filterBy === "tags" && selectedTag) {
       query = query.contains("tags", [selectedTag]);
     }
+    if (visibility) {
+      query = query.eq("visibility", visibility);
+    }
 
     return query;
   };
 
   const fetchEntries = useCallback(async (
     reset = true,
-    filters?: { filterBy: string; selectedDate: string; selectedTag: string; userId?: string }
+    filters?: { filterBy: string; selectedDate: string; selectedTag: string; userId?: string; visibility?: string }
   ) => {
     if (filters) filtersRef.current = { ...filtersRef.current, ...filters };
     try {
@@ -199,6 +207,7 @@ export function useEntries() {
           userReaction,
           interpretation: typedEntry.interpretation ?? "",
           tags: Array.isArray(typedEntry.tags) ? typedEntry.tags : [],
+          visibility: typedEntry.visibility ?? "public",
         };
       });
 
@@ -243,6 +252,7 @@ export function useEntries() {
           date: entryData.date,
           image_url: entryData.image_url,
           user_id: entryData.user_id,
+          visibility: entryData.visibility ?? "public",
         })
         .select(`
           id,
@@ -252,7 +262,8 @@ export function useEntries() {
           image_url,
           created_at,
           user_id,
-          user_profile_summary!inner(username)
+          visibility,
+          user_profile_summary!inner(username, avatar_url)
         `)
         .single();
 
@@ -268,7 +279,8 @@ export function useEntries() {
         created_at: string;
         image_url?: string;
         user_id: string;
-        user_profile_summary: { username: string } | null;
+        visibility: Visibility;
+        user_profile_summary: { username: string; avatar_url: string | null } | null;
         interpretation: string;
         tags: string[];
       };
@@ -279,12 +291,14 @@ export function useEntries() {
         text: typedData.text,
         date: typedData.date,
         username: typedData.user_profile_summary?.username || "Anonymous",
+        avatar_url: typedData.user_profile_summary?.avatar_url || undefined,
         created_at: typedData.created_at,
         image_url: typedData.image_url,
         love_count: 0,
         hate_count: 0,
         comments: [],
         user_id: typedData.user_id,
+        visibility: typedData.visibility ?? "public",
         interpretation: typedData.interpretation || "",
         tags: typedData.tags || [],
       };
@@ -307,7 +321,7 @@ export function useEntries() {
   const updateEntry = useCallback(async (
     id: string,
     updates: Partial<Pick<Entry,
-      "title" | "text" | "date" | "image_url" | "interpretation" | "tags"
+      "title" | "text" | "date" | "image_url" | "interpretation" | "tags" | "visibility"
     >>
   ) => {
     try {

@@ -30,24 +30,45 @@ export default function UserProfile() {
     }
   }, [userId]);
 
-  const [stats, setStats] = useState({ entryCount: 0, likes: 0, comments: 0 });
+  const [stats, setStats] = useState({ entryCount: 0, likes: 0, comments: 0, followers: 0 });
   const [entryDates, setEntryDates] = useState<string[]>([]);
   const [totalTagCount, setTotalTagCount] = useState(0);
   const [allTagsList, setAllTagsList] = useState<string[]>([]);
+  const [isFollowing, setIsFollowing] = useState(false);
+  const [followLoading, setFollowLoading] = useState(false);
+  const [profileUsername, setProfileUsername] = useState<string | null>(null);
+  const [profileAvatarUrl, setProfileAvatarUrl] = useState<string | null>(null);
+  const isOwnProfile = user?.id === userId;
+
+  useEffect(() => {
+    if (!userId) return;
+    supabase
+      .from("user_profile_summary")
+      .select("username, avatar_url")
+      .eq("user_id", userId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) {
+          setProfileUsername(data.username);
+          setProfileAvatarUrl(data.avatar_url);
+        }
+      });
+  }, [userId]);
 
   useEffect(() => {
     if (!userId) return;
     async function fetchTotals() {
-      const [{ count: entryCount }, { count: comments }, entriesForLikes, entriesForMeta] =
+      const [{ count: entryCount }, { count: comments }, entriesForLikes, entriesForMeta, { count: followers }] =
         await Promise.all([
           supabase.from("entries").select("*", { count: "exact", head: true }).eq("user_id", userId!),
           supabase.from("comments").select("*", { count: "exact", head: true }).eq("user_id", userId!),
           supabase.from("entry_actions").select("love_count").eq("user_id", userId!),
           supabase.from("entries").select("date, tags").eq("user_id", userId!),
+          supabase.from("friendships").select("*", { count: "exact", head: true }).eq("following_id", userId!),
         ]);
 
       const likes = (entriesForLikes.data || []).reduce((sum, r) => sum + (r.love_count || 0), 0);
-      setStats({ entryCount: entryCount ?? 0, likes, comments: comments ?? 0 });
+      setStats({ entryCount: entryCount ?? 0, likes, comments: comments ?? 0, followers: followers ?? 0 });
 
       const rows = entriesForMeta.data || [];
       setEntryDates(rows.map((r) => r.date).filter(Boolean));
@@ -58,15 +79,48 @@ export default function UserProfile() {
     fetchTotals();
   }, [userId]);
 
+  useEffect(() => {
+    if (!user || !userId || isOwnProfile) return;
+    supabase
+      .from("friendships")
+      .select("id")
+      .eq("follower_id", user.id)
+      .eq("following_id", userId)
+      .maybeSingle()
+      .then(({ data }) => setIsFollowing(!!data));
+  }, [user, userId, isOwnProfile]);
+
+  async function handleFollowToggle() {
+    if (!user) return;
+    setFollowLoading(true);
+    if (isFollowing) {
+      await supabase.from("friendships").delete()
+        .eq("follower_id", user.id).eq("following_id", userId!);
+      setIsFollowing(false);
+      setStats(s => ({ ...s, followers: Math.max(0, s.followers - 1) }));
+    } else {
+      await supabase.from("friendships").insert({ follower_id: user.id, following_id: userId });
+      setIsFollowing(true);
+      setStats(s => ({ ...s, followers: s.followers + 1 }));
+    }
+    setFollowLoading(false);
+  }
+
   // ── Summary tab state ──────────────────────────────────────────────────────
-  const [summaryTab, setSummaryTab] = useState<"tags" | "calendar" | "latest">("tags");
+  const [summaryTab, setSummaryTab] = useState<"tags" | "calendar" | "latest">("latest");
+  const [visibilityFilter, setVisibilityFilter] = useState<"" | "public" | "private" | "friends">("");
 
   function handleSummaryTab(tab: "tags" | "calendar" | "latest") {
     setSummaryTab(tab);
     if (tab === "latest") {
       setActiveTag(null);
-      fetchEntries(true, { filterBy: "all", selectedDate: "", selectedTag: "", userId: userId! });
+      fetchEntries(true, { filterBy: "all", selectedDate: "", selectedTag: "", userId: userId!, visibility: "" });
     }
+  }
+
+  function handleVisibilityFilter(v: "" | "public" | "private" | "friends") {
+    setVisibilityFilter(v);
+    fetchEntries(true, { filterBy: "all", selectedDate: "", selectedTag: "", userId: userId!, visibility: v });
   }
 
   // ── Tag bubble state ───────────────────────────────────────────────────────
@@ -113,8 +167,8 @@ export default function UserProfile() {
 
   // ── Misc ───────────────────────────────────────────────────────────────────
   const handleBack = () => navigate("/");
-  const avatarUrl = userEntries[0]?.avatar_url;
-  const username = userEntries[0]?.username || "User";
+  const avatarUrl = profileAvatarUrl || userEntries[0]?.avatar_url;
+  const username = profileUsername || userEntries[0]?.username || "User";
 
   const DAY_LABELS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
   const MONTH_NAMES = [
@@ -130,13 +184,30 @@ export default function UserProfile() {
           ← Back to Home
         </button>
 
-        <div className="flex flex-col items-center gap-4">
+        <div className="flex items-center gap-4 text-left">
           <img
             src={avatarUrl || "https://jeggqdlnxakucuwlbchz.supabase.co/storage/v1/object/public/user-images/level1.jpeg"}
             alt="Avatar"
-            className="w-40 h-40 rounded-full object-cover"
+            className="w-20 h-20 rounded-full object-cover shrink-0"
           />
-          <h1 className="text-xl font-bold">{username}</h1>
+          <div className="flex flex-col gap-2">
+            <h1 className="text-xl font-bold">{username}</h1>
+
+            {/* Follow button — only for other users' profiles */}
+            {user && !isOwnProfile && (
+              <button
+                onClick={handleFollowToggle}
+                disabled={followLoading}
+                className={`px-5 py-1.5 rounded-full text-sm font-semibold transition-colors self-start ${
+                  isFollowing
+                    ? "bg-neutral-700 text-gray-300 hover:bg-red-900 hover:text-red-300"
+                    : "bg-blue-600 text-white hover:bg-blue-500"
+                } disabled:opacity-50`}
+              >
+                {followLoading ? "..." : isFollowing ? "Unfriend" : "Add Friend"}
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Stats */}
@@ -144,6 +215,10 @@ export default function UserProfile() {
           <div className="text-center">
             <div className="font-bold text-lg">{stats.entryCount}</div>
             <div className="text-gray-600">Entries</div>
+          </div>
+          <div className="text-center">
+            <div className="font-bold text-lg">{stats.followers}</div>
+            <div className="text-gray-600">Friends</div>
           </div>
           <div className="text-center">
             <div className="font-bold text-lg">{stats.likes}</div>
@@ -159,7 +234,7 @@ export default function UserProfile() {
         <div className="mt-6 rounded-xl border border-neutral-700 overflow-hidden text-left w-full">
           {/* Tab bar */}
           <div className="flex border-b border-neutral-700">
-            {(["tags", "calendar", "latest"] as const).map((tab) => (
+            {(["latest", "tags", "calendar"] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => handleSummaryTab(tab)}
@@ -176,6 +251,22 @@ export default function UserProfile() {
 
           {/* ── Tab panels (fixed height) ── */}
           <div className="p-4">
+
+          {/* Tab: Latest */}
+          {summaryTab === "latest" && (
+            <div className="flex justify-center py-2">
+              <select
+                value={visibilityFilter}
+                onChange={(e) => handleVisibilityFilter(e.target.value as "" | "public" | "friends" | "private")}
+                className="w-160 bg-neutral-800 text-gray-300 text-sm rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-500 text-center"
+              >
+                <option value="">All</option>
+                <option value="public">Public</option>
+                <option value="friends">Friends</option>
+                <option value="private">Private</option>
+              </select>
+            </div>
+          )}
 
           {/* ── Tab: Tags ── */}
           {summaryTab === "tags" && (
@@ -271,7 +362,8 @@ export default function UserProfile() {
                         if (!hasEntry) return;
                         fetchEntries(true, { filterBy: "date", selectedDate: dateStr, selectedTag: "", userId: userId! });
                       }}
-                      className={`text-center text-sm rounded-full flex items-center justify-center aspect-square w-full transition-colors
+                      style={{ fontSize: 22 }}
+                      className={`text-center rounded-full flex items-center justify-center aspect-square w-full transition-colors
                         ${hasEntry
                           ? "bg-blue-500 text-white font-bold cursor-pointer hover:bg-blue-400"
                           : "text-gray-400"

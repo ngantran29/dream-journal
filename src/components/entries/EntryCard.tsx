@@ -44,6 +44,9 @@ export default function EntryCard({
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(entry.title);
   const [editText, setEditText] = useState(entry.text);
+  const [editVisibility, setEditVisibility] = useState<"public" | "friends" | "private">(entry.visibility ?? "public");
+  const [editImageUrl, setEditImageUrl] = useState<string | undefined>(entry.image_url);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
 
   // AI State
@@ -66,6 +69,8 @@ export default function EntryCard({
       const result = await onUpdateEntry(entry.id, {
         title: editTitle,
         text: editText,
+        visibility: editVisibility,
+        image_url: editImageUrl,
       });
       
       // Check if there's an error OR if data is null
@@ -86,18 +91,21 @@ export default function EntryCard({
   const handleGenerateAI = async () => {
     setIsAnalyzing(true);
     try {
+      const { data: { session } } = await supabase.auth.getSession();
       const { data, error } = await supabase.functions.invoke("generate-interpretations", {
         body: { entryText: entry.text },
         headers: {
-          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          Authorization: `Bearer ${session?.access_token}`,
         },
       });
 
       if (error) throw error;
       setAiData(data.data);
-    } catch (err) {
+    } catch (err: any) {
       console.error("AI Generation failed:", err);
-      alert("Failed to generate AI interpretation.");
+      let msg = "Failed to generate AI interpretation.";
+      try { const body = await err?.context?.json?.(); if (body?.error) msg = body.error; } catch {}
+      alert(msg);
     } finally {
       setIsAnalyzing(false);
     }
@@ -135,6 +143,26 @@ export default function EntryCard({
       setIsDeleting(false);
     }
     // If successful, component will unmount so no need to reset loading state
+  };
+
+  const handleEditImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsUploadingImage(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("Not authenticated");
+      const fileName = `${crypto.randomUUID()}_${file.name}`;
+      const path = `${session.user.id}/${fileName}`;
+      const { error } = await supabase.storage.from("user-images").upload(path, file, { contentType: file.type });
+      if (error) throw error;
+      const { data } = supabase.storage.from("user-images").getPublicUrl(path);
+      setEditImageUrl(data.publicUrl);
+    } catch (err: any) {
+      alert(err.message || "Image upload failed");
+    } finally {
+      setIsUploadingImage(false);
+    }
   };
 
   const handleUserClick = () => {
@@ -190,7 +218,18 @@ export default function EntryCard({
               onChange={(e) => setEditTitle(e.target.value)}
             /> </div>
           ) : (
-            <div className="font-bold text-lg text-white">{entry.title}</div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-bold text-lg text-white">{entry.title}</span>
+              {entry.visibility && entry.visibility !== "public" && (
+                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                  entry.visibility === "private"
+                    ? "bg-neutral-700 text-gray-400"
+                    : "bg-blue-900 text-blue-300"
+                }`}>
+                  {entry.visibility === "private" ? "Private" : "Friends"}
+                </span>
+              )}
+            </div>
           )}
           </div>
         </div>
@@ -255,6 +294,49 @@ export default function EntryCard({
             value={editText}
             onChange={(e) => setEditText(e.target.value)}
           />
+
+          {/* Image */}
+          <div className="space-y-2">
+            {editImageUrl && (
+              <div className="relative">
+                <img src={editImageUrl} alt="Entry" className="w-full rounded-md" />
+                <button
+                  type="button"
+                  onClick={() => setEditImageUrl(undefined)}
+                  className="absolute top-1 right-1 bg-black/60 text-white text-xs px-2 py-0.5 rounded hover:bg-red-700"
+                >
+                  Remove
+                </button>
+              </div>
+            )}
+            <label className="flex items-center gap-2 cursor-pointer text-xs text-blue-400 hover:text-blue-300">
+              <span>{isUploadingImage ? "Uploading..." : editImageUrl ? "Change photo" : "Upload photo"}</span>
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                disabled={isUploadingImage}
+                onChange={handleEditImageUpload}
+              />
+            </label>
+          </div>
+
+          {/* Visibility */}
+          <div className="flex rounded-lg overflow-hidden border border-neutral-600">
+            {(["public", "friends", "private"] as const).map((v) => (
+              <button
+                key={v}
+                type="button"
+                onClick={() => setEditVisibility(v)}
+                className={`flex-1 py-1.5 text-xs font-medium transition-colors ${
+                  editVisibility === v ? "bg-blue-600 text-white" : "text-gray-400 hover:text-gray-200"
+                }`}
+              >
+                {v === "public" ? "Public" : v === "friends" ? "Friends" : "Private"}
+              </button>
+            ))}
+          </div>
+
           <button
             type="button"
             onClick={handleUpdate}
@@ -286,11 +368,12 @@ export default function EntryCard({
 
       {/* Comments List */}
       {showComments && (
-        <CommentList 
-          entry={entry} 
-          userId={userId} 
+        <CommentList
+          entry={entry}
+          userId={userId}
           onAddComment={onAddComment}
           onDeleteComment={onDeleteComment}
+          onViewUserProfile={onViewUserProfile}
         />
       )}
 

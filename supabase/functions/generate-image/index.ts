@@ -23,6 +23,55 @@ Deno.serve(async (req) => {
       );
     }
 
+    // --- Rate limit: 10 generations per user per day ---
+    const authHeader = req.headers.get("Authorization") ?? "";
+
+    const supabaseAdmin = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
+
+    const { data: { user } } = await supabaseAdmin.auth.getUser(
+      authHeader.replace("Bearer ", "")
+    );
+
+    if (!user) {
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // --- Rate limit ---
+    const today = new Date().toISOString().slice(0, 10);
+    const DAILY_LIMIT = 10;
+    const fnName = "generate-image";
+
+    const { data: existing } = await supabaseAdmin
+      .from("generation_usage")
+      .select("count")
+      .eq("user_id", user.id)
+      .eq("function_name", fnName)
+      .eq("usage_date", today)
+      .maybeSingle();
+
+    const currentCount = existing?.count ?? 0;
+
+    if (currentCount >= DAILY_LIMIT) {
+      return new Response(
+        JSON.stringify({ error: `Daily limit of ${DAILY_LIMIT} image generations reached. Try again tomorrow.` }),
+        { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    await supabaseAdmin
+      .from("generation_usage")
+      .upsert(
+        { user_id: user.id, function_name: fnName, usage_date: today, count: currentCount + 1 },
+        { onConflict: "user_id,function_name,usage_date" }
+      );
+    // --- End rate limit ---
+
     // Initialize Gemini
     const genAI = new GoogleGenerativeAI(Deno.env.get("GEMINI_API_KEY")!);
     // Using Imagen 3 for high-quality generation
@@ -71,14 +120,8 @@ Deno.serve(async (req) => {
       bytes[i] = binaryString.charCodeAt(i);
     }
 
-    // Supabase Upload Logic
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!, // Change this to match your env variable
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
-
     const fileName = `gemini-${Date.now()}-${crypto.randomUUID()}.png`;
-    const { error: uploadError } = await supabase.storage
+    const { error: uploadError } = await supabaseAdmin.storage
       .from("generated-images")
       .upload(fileName, bytes, {
         contentType: "image/png",
@@ -87,7 +130,7 @@ Deno.serve(async (req) => {
 
     if (uploadError) throw new Error(`Upload failed: ${uploadError.message}`);
 
-    const { data } = supabase.storage.from("generated-images").getPublicUrl(fileName);
+    const { data } = supabaseAdmin.storage.from("generated-images").getPublicUrl(fileName);
 
     return new Response(
       JSON.stringify({
